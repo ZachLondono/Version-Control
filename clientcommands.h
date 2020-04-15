@@ -9,6 +9,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <limits.h>
+#include "sharedfunctions.h"
 
 typedef enum _commandtype {invalid=0, configure=1, checkout=2, update=3, upgrade=4, commit=5, push=6, create=7, destroy=8,
 			add=9, remove_cmnd=10, currentversion=11, history=12, rollback=13} commandtype;

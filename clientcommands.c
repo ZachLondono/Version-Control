@@ -118,15 +118,12 @@ int isNum(char* value, int len) {
 
 Configuration* loadConfig() {
 
-    int fd = 0;
-    if ((fd = open("./.config", O_RDONLY)) < 0) {
-        printf("Error: .config file not found, run config command\n");
+    char* buffer = readfile("./.config");
+    if (buffer == NULL) {
+        printf("Error: .config file does not exist or has incorrect permissions\n");
         return NULL;
     }
-
-    struct stat filestat;
-    stat("./.config", &filestat);
-    size_t size = filestat.st_size;
+    size_t size = strlen(buffer);
 
     // file is blank or jus has empty lines host:\nport:\n
     if (size <= 12) {
@@ -134,17 +131,10 @@ Configuration* loadConfig() {
         return NULL;
     }
 
-    char* buffer = malloc(size);
-
     char* host = malloc(HOST_NAME_MAX + 1);
     memset(host, '\0', HOST_NAME_MAX + 1);
     char* port = malloc(5 + 1); // ports are a 16 bit number, so 5 chars + 1 null
     memset(port, '\0', 6);
-
-    int status = 0;
-    int bytesread = 0;
-    while ((status = read(fd, buffer, size - bytesread)) != 0) bytesread += status;
-    close(fd);
 
     int host_len = 0;
     while (host_len < (size - 10)) {
