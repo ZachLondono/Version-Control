@@ -25,13 +25,10 @@ char* hashdata(char* data) {
 
 char* readfile(char* name) {
     int fd = open(name, O_RDONLY);
-    if (fd < 0) {
-        printf("Error: Couln't open file %s, file doesn't exist or invalid permissions", name);
-        return NULL;
-    }
+    if (fd < 0) return NULL;
 
     struct stat filestat;
-    stat("./.config", &filestat);
+    stat(name, &filestat);
     size_t size = filestat.st_size;
 
     char* buffer = malloc(size);
