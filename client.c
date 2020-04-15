@@ -13,7 +13,9 @@ int main(int argc, char** argv) {
 	Configuration* config = loadConfig();
 	if (config != NULL) {
 		printf("host: %s\n", config->host);
-		printf("port: %s\n", config->port);
+		printf("port: %d\n", config->port);
+		int a = connecttohost(config->host, config->port);
+		printf("%d\n", a);
 		freeConfig(config);
 	}
 
