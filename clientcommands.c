@@ -198,7 +198,8 @@ Configuration* loadConfig() {
     free(buffer);
     Configuration* config = malloc(sizeof(Configuration));
     config->host = host;
-    config->port = port;
+    config->port = atoi(port);
+    free(port);
 
     return config;
 
@@ -207,7 +208,6 @@ Configuration* loadConfig() {
 void freeConfig(Configuration* config) {
     if(config == NULL) return;
     if (config->host != NULL) free(config->host);
-    if (config->port != NULL) free(config->port);
     free(config);
 }
 

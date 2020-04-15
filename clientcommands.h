@@ -20,7 +20,7 @@ typedef struct ClientCommand {
 
 typedef struct Configuration {
     char* host;
-    char* port;
+    int port;
 } Configuration;
 
 int executeCommand(int argc, char** argv);
