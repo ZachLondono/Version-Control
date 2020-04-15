@@ -23,7 +23,6 @@ typedef struct Configuration {
     int port;
 } Configuration;
 
-int executeCommand(int argc, char** argv);
 Configuration* loadConfig();
 void freeConfig(Configuration* config);
 
