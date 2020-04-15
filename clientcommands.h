@@ -3,6 +3,12 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <string.h>
+#include <unistd.h>
+#include <limits.h>
 
 typedef enum _commandtype {invalid=0, configure=1, checkout=2, update=3, upgrade=4, commit=5, push=6, create=7, destroy=8,
 			add=9, remove_cmnd=10, currentversion=11, history=12, rollback=13} commandtype;
@@ -12,7 +18,15 @@ typedef struct ClientCommand {
     char** args;
 } ClientCommand;
 
+typedef struct Configuration {
+    char* host;
+    char* port;
+} Configuration;
+
 int executeCommand(int argc, char** argv);
+Configuration* loadConfig();
+void freeConfig(Configuration* config);
+
 int _invalidcommand(ClientCommand* command);
 int _configure(ClientCommand* command);
 int _checkout(ClientCommand* command);
