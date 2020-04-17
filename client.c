@@ -1,55 +1,11 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <netdb.h>
-#include <netinet/in.h>
 #include <string.h>
 #include "clientcommands.h"
 #include "networking.h"
+#include "sharedfunctions.h"
 
 int main(int argc, char** argv) {
-
-	executeCommand(argc, argv);
-
-	Configuration* config = loadConfig();
-	if (config != NULL) {
-		printf("host: %s\n", config->host);
-		printf("port: %d\n", config->port);
-		int a = connecttohost(config->host, config->port);
-		printf("%d\n", a);
-		freeConfig(config);
-	}
-
-	// Example data transfer
-	// char buffer[256];
-
-	// int sockfd = connecttohost("localhost", 5555);
-	// if (sockfd < 0) return -1; 
-
-	// printf("Enter message: ");
-	// bzero(buffer, 256);
-	// fgets(buffer, 255, stdin);
-
-	// int n = write(sockfd, buffer, 255);
-
-	// if (n < 0) {
-	// 	perror("Error writing\n");
-	// 	return 0;
-	// }
-
-	// bzero(buffer, 256);
-	// n = read(sockfd, buffer, 255);
-
-	// if (n < 0) {
-	// 	perror("error reading\n");
-	// 	return 0;
-	// }
-
-	// printf("%s\n", buffer);
-	// return 0;
-
-}
-
-int executeCommand(int argc, char** argv) {
 
     ClientCommand* command = malloc(sizeof(ClientCommand)); 
     int (*cmnd_func)(ClientCommand*);
@@ -78,7 +34,7 @@ int executeCommand(int argc, char** argv) {
     } else if (strcmp(command_text, "create") == 0) {
         command->type = create;
         cmnd_func = &_create;
-   } else if (strcmp(command_text, "currentversion") == 0) {
+    } else if (strcmp(command_text, "currentversion") == 0) {
         command->type = currentversion;
         cmnd_func = &_currentversion;
     } else if (strcmp(command_text, "add") == 0) {
@@ -132,5 +88,4 @@ int executeCommand(int argc, char** argv) {
     free(command);
 
     return ret;
-
 }

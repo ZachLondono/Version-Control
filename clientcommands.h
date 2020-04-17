@@ -9,6 +9,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <limits.h>
+#include <ctype.h>
 #include "sharedfunctions.h"
 
 typedef enum _commandtype {invalid=0, configure=1, checkout=2, update=3, upgrade=4, commit=5, push=6, create=7, destroy=8,
@@ -27,6 +28,7 @@ typedef struct Configuration {
 Configuration* loadConfig();
 void freeConfig(Configuration* config);
 
+int isNum(char* value, int len);
 int _invalidcommand(ClientCommand* command);
 int _configure(ClientCommand* command);
 int _checkout(ClientCommand* command);
