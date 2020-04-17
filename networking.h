@@ -10,8 +10,11 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include "sharedfunctions.h"
 
-#define CMND_NAME_MAX 8
+// contains various functions which aid in sending/recieving messages which abide by the specified network protocol
+
+#define CMND_NAME_MAX 9
 typedef enum messagetype {checknet, createnet, destroynet, projectnet, rollbacknet, versionnet, filenet, responsenet, invalidnet} messagetype;
 typedef struct NetworkCommand {
     messagetype type;
@@ -25,12 +28,11 @@ typedef struct NetworkCommand {
 #define ARGDELIM ':'
 
 int connecttohost(char* remote, int port);
-int bindtoport(int fd, int port);
 
 NetworkCommand* readMessage(int sockfd);
 void freeCMND(NetworkCommand* command);
 NetworkCommand* newFailureCMND(char* commandName, char* reason);
-char* readSection(int fd, int upperbound);
+char* readSection(int fd, int upperbound, char** contbuffer, int* buffersize, int ignoredelim);
 int sendNetworkCommand(NetworkCommand* command, int sockfd);
 int digitCount(int num);
 

@@ -40,20 +40,6 @@ int connecttohost(char* remote, int port) {
 
 }
 
-int bindtoport(int sockfd, int port) {
-
-	struct sockaddr_in serv_addr;
-
-	bzero((char*)&serv_addr, sizeof(serv_addr));
-
-	serv_addr.sin_family = AF_INET;
-	serv_addr.sin_addr.s_addr = INADDR_ANY;
-	serv_addr.sin_port = htons(port);
-
-	return bind(sockfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr));
-
-}
-
 NetworkCommand* readMessage(int sockfd) {
 
 	if (sockfd < 0) {
@@ -61,7 +47,12 @@ NetworkCommand* readMessage(int sockfd) {
 		return NULL;
 	}
 
-	char* commandname = readSection(sockfd, CMND_NAME_MAX);
+	int buffersize = 200;
+	char* contbuffer = malloc(buffersize);
+	memset(contbuffer, '\0', buffersize);
+  
+
+	char* commandname = readSection(sockfd, CMND_NAME_MAX, &contbuffer, &buffersize, 0);
 	if (!commandname) {	// if command name was null, it was larger than max length
 		commandname = malloc(CMND_NAME_MAX + 1);
 		memset(commandname, '\0', CMND_NAME_MAX + 1);
@@ -70,7 +61,7 @@ NetworkCommand* readMessage(int sockfd) {
 		memcpy(reason, "Failed to read command name", 28);
 		return newFailureCMND(commandname, reason);
 	}
-	char* argc_s = readSection(sockfd, 5);
+	char* argc_s = readSection(sockfd, 5, &contbuffer, &buffersize, 0);
 	if (!argc_s) {	// if argc_s is null, the value overflowed the upperbounds of the buffer
 		char* reason = malloc(30);
 		memcpy(reason, "Failed to read argument count", 30);
@@ -85,8 +76,7 @@ NetworkCommand* readMessage(int sockfd) {
 	int i = 0;
 	for(i = 0; i < argc; i++) {
 		
-		char* size_s = readSection(sockfd, 100);	// read in the length of the argument in bytes
-
+		char* size_s = readSection(sockfd, 3, &contbuffer, &buffersize, 0);	// read in the length of the argument in bytes
 		if (!size_s) {	// if size_s is null, the value is more digits than the upperbounds
 			char* reason = malloc(29);
 			memcpy(reason, "Failed to read argument size", 29);
@@ -97,16 +87,8 @@ NetworkCommand* readMessage(int sockfd) {
 		arglengths[i] = size;
 		free(size_s);
 
-		char* buffer = malloc(size + 1);
-		memset(buffer, '\0', size + 1);
-		int bytesread = 0;
-		int status = 0;
-		while((status = read(sockfd, &buffer[bytesread], size - bytesread)) > 0) {
-			bytesread += status;				// read the bytes to the allocate memory
-			if (bytesread > size) break;
-		}
+		char* buffer = readSection(sockfd, size, &contbuffer, &buffersize, 1);
 		argv[i] = buffer;
-
 	}
 	
 	NetworkCommand* command = malloc(sizeof(NetworkCommand));
@@ -171,7 +153,7 @@ void freeCMND(NetworkCommand* command) {
 
 NetworkCommand* newFailureCMND(char* commandName, char* reason) {
 	NetworkCommand* command = malloc(sizeof(NetworkCommand));
-	command->type = invalidnet;
+	command->type = responsenet;
 	command->argc = 3;
 	command->argv = malloc(sizeof(char*) * 3);
 	command->arglengths = malloc(sizeof(int) * 3);
@@ -275,32 +257,62 @@ int _filenet(NetworkCommand* command, int sockfd) {
 	return 0;
 }
 
-char* readSection(int fd, int upperbound) {
+char* readSection(int fd, int upperbound, char** contbuffer, int* buffersize, int ignoreDelim) {   // buffersize will always be at least the size of buffersize after function execute
 
-	char* buffer = malloc(upperbound + 2);	// +2 for null byte and delimiter
-	memset(buffer, '\0', upperbound + 2);
-	size_t bytesread = 0;
-	int status = 0;
-	while((status = read(fd, &buffer[bytesread], (upperbound+1) - bytesread)) > 0) { 
-		bytesread += status;
-		if (bytesread > upperbound) break;
+    if (!(*contbuffer)) {
+		printf("Error: continuous buffer is null\n");
+		return NULL;
 	}
-	size_t commandlength = 0;
-	while(commandlength < upperbound + 1) {
-		if (buffer[commandlength] == ARGDELIM) {
-			memset(&buffer[commandlength], '\0', bytesread - commandlength + 1);	// Null out the rest of the buffer, after the name
-			long offset = -(bytesread - 1 - commandlength);
-			int a = lseek(fd,offset,1);									// Reset the fd pointer to just after the deliminator 
-			if (a == -1) printf("error with lseek %s\n", strerror(errno));
-			break;
+    size_t populatedbytes = strlen((*contbuffer));                          // number of bytes already read in
+    if (populatedbytes <= upperbound) {                                     // check if enough bytes have been read already
+        if (*buffersize <= upperbound) {                                    // if enough have not been read, make sure there is room in the buffer
+            char* resized = realloc((*contbuffer), upperbound + 1);         // reallocate buffer to fit <= upperbound + 1 bytes
+            if (!resized) {                                                 // check thatn buffer was able to be resized
+                printf("Error: failed to allocate memory, buy some more ram you cheapskate, I only need %d more bytes...\n", upperbound + 1);
+                return NULL;
+            } 
+            (*contbuffer) = resized;
+            memset(&(*contbuffer)[*buffersize], '0', upperbound-*buffersize);   // null out new bytes
+            *buffersize = upperbound + 1;
+        }
+        int status = 0;
+        while (populatedbytes < upperbound && (status = read(fd, &(*contbuffer)[populatedbytes], upperbound - populatedbytes)) > 0) {
+                populatedbytes += status;                                      // read in max bytes
 		}
-		++commandlength;
-		if (commandlength > upperbound + 1) {
-			return NULL;
-		}
+        (*contbuffer)[upperbound] = '\0';                                      //make sure buffer ends with null byte
+    }
+
+    char* ret = malloc(upperbound + 1);
+    if (!ret) {
+        printf("Error: failed to allocate memory, buy some more ram you cheapskate, I only need %d more bytes...\n",    upperbound + 1);
+        return NULL;
+    }
+    memset(ret, '\0', upperbound + 1);
+
+    if (ignoreDelim) {
+        memcpy(ret, *contbuffer, upperbound);
+		strshift((*contbuffer), *buffersize, upperbound); 	// skip over used bytes
+        return ret;
+    }
+
+    size_t readindex = 0;
+    while(readindex <= upperbound) {
+        // parse out token
+		if ((*contbuffer)[readindex] == ARGDELIM) {
+            memcpy(ret, (*contbuffer), readindex);          // copy token from buffer
+            break;
+        }
+		++readindex;
+    }
+	if (readindex > upperbound + 1) {
+        free(ret);
+        printf("Error: index out of bounds\n");
+		return NULL;
 	}
 
-	return buffer;	// can imporve memory usage by instead returning a char* of the exact size needed when section size is bellow upperbound
+    strshift((*contbuffer), *buffersize, readindex + 1);    // readindex is the index of the last character before the delimiter, add 1 to skip delim
+
+    return ret;
 
 }
 
