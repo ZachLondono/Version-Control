@@ -28,7 +28,6 @@ typedef struct Configuration {
 Configuration* loadConfig();
 void freeConfig(Configuration* config);
 
-int isNum(char* value, int len);
 int _invalidcommand(ClientCommand* command);
 int _configure(ClientCommand* command);
 int _checkout(ClientCommand* command);

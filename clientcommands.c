@@ -110,12 +110,6 @@ int _rollback(ClientCommand* command) {
     return -1;
 }
 
-int isNum(char* value, int len) {
-    int i = 0;
-    for(i = 0; i < len; i++) if (!isdigit(value[i])) return 0;
-    return 1;
-}
-
 Configuration* loadConfig() {
 
     char* buffer = readfile("./.config");
