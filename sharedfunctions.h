@@ -9,10 +9,11 @@
 #include <dirent.h>
 #include <openssl/sha.h>
 #include <string.h>
+#include <unistd.h>
 
 int checkForLocalProj(char* projname);
-void hashtohexprint(char* hash);
-char* hashdata(char* data);
+void hashtohexprint(unsigned char* hash);
+unsigned char* hashdata(unsigned char* data, size_t datalen);
 char* readfile(char* name);
 
 #endif

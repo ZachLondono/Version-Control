@@ -8,7 +8,7 @@ int checkForLocalProj(char* projname) {
 	return 1;
 }
 
-void hashtohexprint(char* hash) {
+void hashtohexprint(unsigned char* hash) {
 	int i = 0;
 	for (i = 0; i < SHA_DIGEST_LENGTH; i++) {
 		printf(" %2x", (unsigned char) hash[i]);
@@ -16,10 +16,9 @@ void hashtohexprint(char* hash) {
 	printf("\n");
 }
 
-char* hashdata(char* data) {
-	size_t len = strlen(data);
+unsigned char* hashdata(unsigned char* data, size_t datalen) {
 	unsigned char* hash = malloc(SHA_DIGEST_LENGTH);
-	SHA1(data, len, hash);
+	SHA1(data, datalen, hash);
 	return hash;
 }
 
