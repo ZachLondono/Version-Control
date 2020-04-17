@@ -39,3 +39,21 @@ char* readfile(char* name) {
 
     return buffer;
 }
+
+int isNum(char* value, int len) {
+    int i = 0;
+    for(i = 0; i < len; i++) if (!isdigit(value[i])) return 0;
+    return 1;
+}
+
+int strshift(char* word, size_t buffsize, int offset) {
+    if (offset > buffsize) return -1;
+    if (!word) return -1;
+    size_t usedbytes = strlen(word);
+    if (usedbytes == 0) return -1;
+    int i = 0;
+    for(i = 0; i + offset < buffsize; i++) 
+        word[i] = word[i + offset];
+    memset(&word[usedbytes - offset], '\0', buffsize-i);
+    return 0;
+}
