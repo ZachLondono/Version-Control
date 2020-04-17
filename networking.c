@@ -91,6 +91,8 @@ NetworkCommand* readMessage(int sockfd) {
 		argv[i] = buffer;
 	}
 	
+	free(contbuffer);
+
 	NetworkCommand* command = malloc(sizeof(NetworkCommand));
 	command->argc = argc;
 	command->arglengths = arglengths;
