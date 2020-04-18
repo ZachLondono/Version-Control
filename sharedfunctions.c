@@ -22,8 +22,8 @@ unsigned char* hashdata(unsigned char* data, size_t datalen) {
 	return hash;
 }
 
-char* readfile(char* name) {
-    int fd = open(name, O_RDONLY);
+FileContents* readfile(char* name) {
+    int fd = open(name, O_RDWR);
     if (fd < 0) return NULL;
 
     struct stat filestat;
@@ -35,15 +35,34 @@ char* readfile(char* name) {
     int status = 0;
     int bytesread = 0;
     while ((status = read(fd, buffer, size - bytesread)) != 0) bytesread += status;
-    close(fd);
+    // close(fd);
 
-    return buffer;
+    FileContents* file = malloc(sizeof(FileContents));
+    file->content = buffer;
+    file->size = size;
+    file->fd = fd;
+    return file;
+}
+
+void freefile(FileContents* file) {
+    close(file->fd);
+    free(file->content);
+    free(file);
 }
 
 int isNum(char* value, int len) {
     int i = 0;
     for(i = 0; i < len; i++) if (!isdigit(value[i])) return 0;
     return 1;
+}
+
+int digitCount(int num) {
+	int count = 0;
+	do {
+    	count++;
+		num /= 10;
+    } while(num != 0);
+	return count;
 }
 
 int strshift(char* word, size_t buffsize, int offset) {
@@ -56,4 +75,58 @@ int strshift(char* word, size_t buffsize, int offset) {
         word[i] = word[i + offset];
     memset(&word[usedbytes - offset], '\0', buffsize-i);
     return 0;
+}
+
+int incrimentManifest(char* project) {
+
+    int path_size = strlen(project) + 13;
+    char* path = malloc(path_size);
+    memset(path, '\0', path_size);
+    strcat(path,"./");
+    strcat(path,project);
+    strcat(path,"/.Manifest");
+
+    FileContents* manifest = readfile(path);
+
+    if (manifest == NULL) {
+        printf("Error: project does not exist or does not contain .Manifest\n");
+        return -1;
+    }
+
+    int size = manifest->size;
+
+    char* version_s = NULL;
+    int i = 0;
+    for (i = 0; i < size; i++) {
+        if (manifest->content[i] != '\n') continue;
+        version_s = malloc(i + 1 + 1);      // +1 for NULL +1 incase incrimenting it leads to an additional digit
+        memset(version_s, '\0', i + 1 + 1);
+        memcpy(version_s, manifest->content, i);
+        break;
+    }
+
+    if (version_s == NULL || !isNum(version_s, i)) {
+        printf("Error: Malformed .Manifest file, unable to incriment version\n");
+        return -1;
+    }
+
+    int version = atoi(version_s);
+    memset(version_s, '\0', i + 1 + 1);
+    snprintf(version_s, i+2, "%d", ++version);
+    printf("New .Manifest version: %d=%s digits = %d\n", version, version_s, digitCount(version));
+
+    int tmpfd = open("./.Manifest.tmp", O_RDWR | O_CREAT, S_IRWXU);
+
+    write(tmpfd, version_s, digitCount(version));
+    write(tmpfd, &manifest->content[i], manifest->size-i);
+
+    free(version_s);
+    freefile(manifest);
+
+    remove(path);
+
+    rename("./.Manifest.tmp", path);
+    free(path);
+    close(tmpfd);
+
 }

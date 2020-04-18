@@ -13,12 +13,20 @@
 #include <ctype.h>
 
 // Contains various utility functions that both client and server may want/need to use
+typedef struct FileContents{
+    char* content;
+    size_t size;
+    int fd;
+} FileContents;
 
 int checkForLocalProj(char* projname);
 void hashtohexprint(unsigned char* hash);
 unsigned char* hashdata(unsigned char* data, size_t datalen);
-char* readfile(char* name);
+FileContents* readfile(char* name);
+void freefile(FileContents* file);
 int isNum(char* value, int len);
+int digitCount(int num);
 int strshift(char* word, size_t buffsize, int offset);
+int incrimentManifest(char* project);
 
 #endif
