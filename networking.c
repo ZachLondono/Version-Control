@@ -386,12 +386,3 @@ int sendNetworkCommand(NetworkCommand* command, int sockfd) {
 	return write(sockfd, message, messagelen);
 
 }
-
-int digitCount(int num) {
-	int count = 0;
-	do {
-    	count++;
-		num /= 10;
-    } while(num != 0);
-	return count;
-}

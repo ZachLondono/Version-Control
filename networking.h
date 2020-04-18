@@ -34,7 +34,6 @@ void freeCMND(NetworkCommand* command);
 NetworkCommand* newFailureCMND(char* commandName, char* reason);
 char* readSection(int fd, int upperbound, char** contbuffer, int* buffersize, int ignoredelim);
 int sendNetworkCommand(NetworkCommand* command, int sockfd);
-int digitCount(int num);
 
 int _responsenet(NetworkCommand* command, int sockfd);
 int _checknet(NetworkCommand* command, int sockfd);
