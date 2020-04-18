@@ -96,8 +96,38 @@ int _remove(ClientCommand* command) {
 }
 
 int _currentversion(ClientCommand* command) {
-    printf("currentversion not implimented\n");
-    return -1;
+
+    NetworkCommand* request = malloc(sizeof(NetworkCommand));
+    request->type = versionnet;
+    request->argc = 1;
+    request->arglengths = malloc(sizeof(int));
+    request->argv = malloc(sizeof(char*)); 
+
+    request->arglengths[0] = strlen(command->args[0]);
+    request->argv[0] = command->args[0];
+
+    Configuration* config = loadConfig();
+    if (config == NULL) return -1;
+    int sockfd = 0;
+    if ((sockfd = connecttohost(config->host, config->port)) < 0) return -1;
+
+    sendNetworkCommand(request, sockfd);
+
+    NetworkCommand* response = readMessage(sockfd);
+
+    if (response->argc != 3 || strcmp(response->argv[0], "version") != 0) {
+        printf("Error: Malformed response from server\n");
+        return -1;
+    }
+
+    if (strcmp(response->argv[1], "failure") == 0) {
+        printf("Error: server failed to recieve current version: %s\n", response->argv[2]);
+        return -1;
+    }
+
+    printf("Project version: %s\n", response->argv[2]); 
+
+    return 0;
 }
 
 int _history(ClientCommand* command) {
@@ -112,7 +142,8 @@ int _rollback(ClientCommand* command) {
 
 Configuration* loadConfig() {
 
-    char* buffer = readfile("./.config");
+    FileContents* file = readfile("./.config");
+    char* buffer = file->content;
     if (buffer == NULL) {
         printf("Error: .config file does not exist or has incorrect permissions\n");
         return NULL;
