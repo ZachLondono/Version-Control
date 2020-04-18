@@ -87,6 +87,53 @@ int incrimentManifest(char* project) {
     strcat(path,"/.Manifest");
 
     FileContents* manifest = readfile(path);
+    if (!manifest) return -1;
+    int version = getManifestVersion(manifest);
+    if (version < 0) {
+        printf("Error: failed to open .Manifest");
+        return version;
+    }
+    
+    int digc = digitCount(version);
+    char* version_s = malloc(digc + 1);
+    memset(version_s, '\0', digc + 1);
+    snprintf(version_s, digc+2, "%d", ++version);
+    printf("New .Manifest version: %d=%s digits = %d\n", version, version_s, digitCount(version));
+
+    int tmpfd = open("./.Manifest.tmp", O_RDWR | O_CREAT, S_IRWXU);
+
+    write(tmpfd, version_s, digc);
+    write(tmpfd, &manifest->content[digc], manifest->size-digc);
+
+    free(version_s);
+    freefile(manifest);
+
+    remove(path);
+
+    rename("./.Manifest.tmp", path);
+    free(path);
+    close(tmpfd);
+
+    return 0;
+
+}
+
+int projectVersion(char* project) {
+
+    int path_size = strlen(project) + 13;
+    char* path = malloc(path_size);
+    memset(path, '\0', path_size);
+    strcat(path,"./");
+    strcat(path,project);
+    strcat(path,"/.Manifest");
+
+    FileContents* manifest = readfile(path);
+    free(path);
+    return getManifestVersion(manifest);
+
+}
+
+int getManifestVersion(FileContents* manifest) {
 
     if (manifest == NULL) {
         printf("Error: project does not exist or does not contain .Manifest\n");
@@ -110,23 +157,6 @@ int incrimentManifest(char* project) {
         return -1;
     }
 
-    int version = atoi(version_s);
-    memset(version_s, '\0', i + 1 + 1);
-    snprintf(version_s, i+2, "%d", ++version);
-    printf("New .Manifest version: %d=%s digits = %d\n", version, version_s, digitCount(version));
-
-    int tmpfd = open("./.Manifest.tmp", O_RDWR | O_CREAT, S_IRWXU);
-
-    write(tmpfd, version_s, digitCount(version));
-    write(tmpfd, &manifest->content[i], manifest->size-i);
-
-    free(version_s);
-    freefile(manifest);
-
-    remove(path);
-
-    rename("./.Manifest.tmp", path);
-    free(path);
-    close(tmpfd);
+    return atoi(version_s);
 
 }

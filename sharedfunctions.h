@@ -28,5 +28,7 @@ int isNum(char* value, int len);
 int digitCount(int num);
 int strshift(char* word, size_t buffsize, int offset);
 int incrimentManifest(char* project);
+int projectVersion(char* project);
+int getManifestVersion(FileContents* manifest);
 
 #endif
