@@ -9,6 +9,7 @@
 #include <arpa/inet.h>
 #include "networking.h"
 #include "sharedfunctions.h"
+#include "servercommands.h"
 
 int main(int argc, char** argv) {
 
@@ -58,11 +59,9 @@ int main(int argc, char** argv) {
 
 	NetworkCommand* message =  readMessage(clisockfd);
 	
-	printf("Message recieved from client\n");
-	message->operation(message, clisockfd);
-	printf("Recieved message from server\n");
-    printf("argv[0] %s\n", message->argv[0]);
-
+	printf("LOG: Message recieved from client -> %d\n", message->type);
+	executecommand(message, clisockfd);
+	freeCMND(message);
 
 	// int serverfd = socket(AF_INET, SOCK_STREAM,0);
 

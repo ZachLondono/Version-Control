@@ -1,7 +1,6 @@
 #include "networking.h"
 #include <errno.h>
 
-// Connects a client to a remote computer on specified port
 int connecttohost(char* remote, int port) {
 
 	// create a socket file descriptor to read/write to
@@ -22,7 +21,9 @@ int connecttohost(char* remote, int port) {
 	bcopy((char *)server->h_addr, (char*)&serv_addr.sin_addr.s_addr, server->h_length);
 
 	// connect to the server
+	int newline = 0;
 	while (connect(sockfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0) {
+		newline = 1;
 		printf("\rAttempting to connect to host.  ");
 		fflush(stdout);
 		sleep(1);		
@@ -33,8 +34,8 @@ int connecttohost(char* remote, int port) {
 		fflush(stdout);
 		sleep(1);		
 	}
-	printf("\n");
-
+	if (newline) printf("\n");
+	
 	// return filedescriptor that can be written to/read from
 	return sockfd;
 
@@ -50,7 +51,6 @@ NetworkCommand* readMessage(int sockfd) {
 	int buffersize = 200;
 	char* contbuffer = malloc(buffersize);
 	memset(contbuffer, '\0', buffersize);
-  
 
 	char* commandname = readSection(sockfd, CMND_NAME_MAX, &contbuffer, &buffersize, 0);
 	if (!commandname) {	// if command name was null, it was larger than max length
@@ -124,55 +124,9 @@ NetworkCommand* readMessage(int sockfd) {
 		return newFailureCMND(name, reason);
 	}
 
-
-	printf("Msg recieved:\n\ttype:%s\n\targc:%d\n", commandname, argc);
-
 	free(commandname);
 
 	return command;
-
-}
-
-
-NetworkCommand* newFailureCMND(char* commandName, char* reason) {
-	NetworkCommand* command = malloc(sizeof(NetworkCommand));
-	command->type = responsenet;
-	command->argc = 3;
-	command->argv = malloc(sizeof(char*) * 3);
-	command->arglengths = malloc(sizeof(int) * 3);
-	command->arglengths[0] = strlen(commandName);
-	command->arglengths[1] = 8;
-	command->arglengths[2] = strlen(reason);
-	command->argv[0] = commandName;
-	command->argv[1] = malloc(8);
-	memcpy(command->argv[1], "failure", 8);
-	command->argv[2] = reason;
-	return command;
-}
-
-NetworkCommand* newSuccessCMND(char* commandName, char* reason) {
-	NetworkCommand* command = newFailureCMND(commandName, reason);
-	memcpy(command->argv[1], "success", 8);
-	return command;
-}
-
-
-void freeCMND(NetworkCommand* command) {
-
-	if (!command) {
-		printf("attempting to free null network command\n");
-		return;
-	} 
-
-	if (command->arglengths != NULL) free(command->arglengths);
-	if (command->argv != NULL) {
-		int i = 0;
-		for (i = 0; i < command->argc; i++) {
-			if (command->argv[i] != NULL) free(command->argv[i]);
-		}
-		free(command->argv);
-	}
-	free(command);
 
 }
 
@@ -198,7 +152,10 @@ char* readSection(int fd, int upperbound, char** contbuffer, int* buffersize, in
         while (populatedbytes < upperbound && (status = read(fd, &(*contbuffer)[populatedbytes], upperbound - populatedbytes)) > 0) {
                 populatedbytes += status;                                      // read in max bytes
 		}
-        (*contbuffer)[upperbound] = '\0';                                      //make sure buffer ends with null byte
+		if (status < 0 ) {
+			printf("couldnt read message: %s\n", strerror(errno));
+		}
+		(*contbuffer)[upperbound] = '\0';                                      //make sure buffer ends with null byte
     }
 
     char* ret = malloc(upperbound + 1);
@@ -302,10 +259,50 @@ int sendNetworkCommand(NetworkCommand* command, int sockfd) {
 
 	int ret = write(sockfd, message, messagelen);
 
-	printf("%s\n",message);
-
 	free(message);
 
 	return ret;
 
 }
+
+NetworkCommand* newFailureCMND(char* commandName, char* reason) {
+	NetworkCommand* command = malloc(sizeof(NetworkCommand));
+	command->type = responsenet;
+	command->argc = 3;
+	command->argv = malloc(sizeof(char*) * 3);
+	command->arglengths = malloc(sizeof(int) * 3);
+	command->arglengths[0] = strlen(commandName);
+	command->arglengths[1] = 7;
+	command->arglengths[2] = strlen(reason);
+	command->argv[0] = commandName;
+	command->argv[1] = malloc(8);
+	memcpy(command->argv[1], "failure", 7);
+	command->argv[2] = reason;
+	return command;
+}
+
+NetworkCommand* newSuccessCMND(char* commandName, char* reason) {
+	NetworkCommand* command = newFailureCMND(commandName, reason);
+	memcpy(command->argv[1], "success", 7);
+	return command;
+}
+
+void freeCMND(NetworkCommand* command) {
+
+	if (!command) {
+		printf("attempting to free null network command\n");
+		return;
+	} 
+
+	if (command->arglengths != NULL) free(command->arglengths);
+	if (command->argv != NULL) {
+		int i = 0;
+		for (i = 0; i < command->argc; i++) {
+			if (command->argv[i] != NULL) free(command->argv[i]);
+		}
+		free(command->argv);
+	}
+	free(command);
+
+}
+

@@ -1,6 +1,32 @@
 #include "clientcommands.h"
 
 //invalid=0, configure=1, checkout=2, update=3, upgrade=4, commit=5, push=6, create=7, destroy=8, add=9, remove_cmnd=10, currentversion=11, history=12, rollback=13
+int connectwithconfig() {	// load config file and connect to host with it
+	Configuration* config = loadConfig();
+	if (config == NULL) return -1;
+	int sockfd = connecttohost(config->host, config->port);
+	freeConfig(config);
+	return sockfd;
+}
+
+NetworkCommand* newrequest(ClientCommand* command, int argc) {
+    
+    NetworkCommand* request = malloc(sizeof(NetworkCommand));
+    request->argc = 1;
+    request->arglengths = malloc(sizeof(int) * argc);
+    request->argv = malloc(sizeof(char*) * argc);
+
+    int i = 0;
+    for (i = 0; i < argc; i++) {
+        request->arglengths[i] = strlen(command->args[i]);
+        request->argv[i] = malloc(request->arglengths[i] + 1);
+        memset(request->argv[i], '\0', request->arglengths[i] + 1);
+        memcpy(request->argv[i], command->args[i], request->arglengths[i]);
+    }
+
+    return request;
+
+}
 
 int _invalidcommand(ClientCommand* command) {
     //TODO maybe set type of invalid command in parse command?
@@ -76,8 +102,37 @@ int _push(ClientCommand* command) {
 }
 
 int _create(ClientCommand* command) {
-    printf("create not implimented\n");
-    return -1;
+    
+    NetworkCommand* request = newrequest(command, 1);
+    request->type = createnet;
+
+    int sockfd = connectwithconfig();
+    if (sockfd < 0) return sockfd;
+
+    sendNetworkCommand(request, sockfd);
+    freeCMND(request);
+
+    NetworkCommand* response = readMessage(sockfd);
+    close(sockfd);
+    
+    if (response->argc != 3 || strcmp(response->argv[0], "create") != 0) {
+        printf("Error: Malformed response from server\n");
+        freeCMND(response);
+        return -1;
+    }
+
+    if (strcmp(response->argv[1], "failure") == 0) {
+        printf("Error: server failed to create the project: %s\n", response->argv[2]);
+        freeCMND(response);
+        return -1;
+    }
+
+    printf("Project %s has been created on the repository\n", command->args[0]);
+
+    freeCMND(response);
+    
+    return 0;
+
 }
 
 int _destroy(ClientCommand* command) {
@@ -97,50 +152,33 @@ int _remove(ClientCommand* command) {
 
 int _currentversion(ClientCommand* command) {
 
-    NetworkCommand* request = malloc(sizeof(NetworkCommand));
+    NetworkCommand* request = newrequest(command, 1);
     request->type = versionnet;
-    request->argc = 1;
-    request->arglengths = malloc(sizeof(int));
-    request->argv = malloc(sizeof(char*)); 
 
-    request->arglengths[0] = strlen(command->args[0]);
-    request->argv[0] = malloc(request->arglengths[0] + 1);
-    memset(request->argv[0], '\0', request->arglengths[0] + 1);
-    memcpy(request->argv[0], command->args[0], request->arglengths[0]);
-
-    Configuration* config = loadConfig();
-    if (config == NULL) return -1;
-    int sockfd = 0;
-    if ((sockfd = connecttohost(config->host, config->port)) < 0) return -1;
-    freeConfig(config);
+    int sockfd = connectwithconfig();
+    if (sockfd < 0) return sockfd;
 
     sendNetworkCommand(request, sockfd);
-    close(sockfd);
+    freeCMND(request);
 
     NetworkCommand* response = readMessage(sockfd);
-
+    close(sockfd);
+    
     if (response->argc != 3 || strcmp(response->argv[0], "version") != 0) {
         printf("Error: Malformed response from server\n");
-        close(sockfd);
         freeCMND(response);
-        freeCMND(request);
         return -1;
     }
 
     if (strcmp(response->argv[1], "failure") == 0) {
         printf("Error: server failed to recieve current version: %s\n", response->argv[2]);
-        close(sockfd);
         freeCMND(response);
-        freeCMND(request);
         return -1;
     }
 
     printf("Project version: %s\n", response->argv[2]); 
     
-    close(sockfd);
     freeCMND(response);
-    freeCMND(request);
-
 
     return 0;
 }

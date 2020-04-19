@@ -28,6 +28,7 @@ typedef struct Configuration {
 
 Configuration* loadConfig();
 void freeConfig(Configuration* config);
+int connectwithconfig();
 
 int _invalidcommand(ClientCommand* command);
 int _configure(ClientCommand* command);
