@@ -132,14 +132,21 @@ NetworkCommand* readMessage(int sockfd) {
 		return newFailureCMND(name, reason);
 	}
 
+
+	printf("Msg recieved:\n\ttype:%s\n\targc:%d\n", commandname, argc);
+
 	free(commandname);
+
 	return command;
 
 }
 
 void freeCMND(NetworkCommand* command) {
 
-	if (!command) return;
+	if (!command) {
+		printf("attempting to free null network command\n");
+		return;
+	} 
 
 	if (command->arglengths != NULL) free(command->arglengths);
 	if (command->argv != NULL) {
@@ -265,22 +272,20 @@ int _versionnet(NetworkCommand* command, int sockfd) {
 	// version  arg0- project name
 	char* name = malloc(9);
 	memcpy(name, "version", 9);
-	
+
 	if (command->argc != 1) {
 		printf("Error: Malformed message from client\n");
-		char* reason = malloc(18);
-		memcpy(reason, "Malformed message", 18);
-		NetworkCommand* response = newFailureCMND(name, reason);	
+		NetworkCommand* response = newFailureCMND(name, "Malformed message");	
 		sendNetworkCommand(response, sockfd);
+		freeCMND(response);
 		return -1;
 	}
 
 	if (!checkForLocalProj(command->argv[0])) {
 		printf("Error: Request for invalid project from client\n");
-		char* reason = malloc(24);
-		memcpy(reason, "Project doesn not exist", 24);
-		NetworkCommand* response = newFailureCMND(name, reason);	
+		NetworkCommand* response = newFailureCMND(name, "Project doesn not exist");	
 		sendNetworkCommand(response, sockfd);
+		freeCMND(response);
 		return -1;
 	}
 
@@ -290,6 +295,7 @@ int _versionnet(NetworkCommand* command, int sockfd) {
 	snprintf(reason, digitCount(version)+1, "%d", version);
 	NetworkCommand* response = newSuccessCMND(name, reason);
 	sendNetworkCommand(response, sockfd);
+	freeCMND(response);
 	return 0;
 }
 
@@ -364,7 +370,7 @@ char* readSection(int fd, int upperbound, char** contbuffer, int* buffersize, in
 
 int sendNetworkCommand(NetworkCommand* command, int sockfd) {
 
-	int messagelen = CMND_NAME_MAX + 1 + digitCount(command->argc);
+	int messagelen = CMND_NAME_MAX + 2 + digitCount(command->argc);
 	int i = 0;
 	for (i = 0; i < command->argc; i++) messagelen += command->arglengths[i] + 1 + digitCount(command->arglengths[i]);
 
@@ -427,6 +433,12 @@ int sendNetworkCommand(NetworkCommand* command, int sockfd) {
 		strcat(message,command->argv[i]);
 	}
 
-	return write(sockfd, message, messagelen);
+	int ret = write(sockfd, message, messagelen);
+
+	printf("%s\n",message);
+
+	free(message);
+
+	return ret;
 
 }

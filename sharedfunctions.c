@@ -129,7 +129,9 @@ int projectVersion(char* project) {
 
     FileContents* manifest = readfile(path);
     free(path);
-    return getManifestVersion(manifest);
+    int ret = getManifestVersion(manifest);
+    freefile(manifest);
+    return ret;
 
 }
 
@@ -157,6 +159,8 @@ int getManifestVersion(FileContents* manifest) {
         return -1;
     }
 
-    return atoi(version_s);
+    int ret = atoi(version_s);
+    free(version_s);
+    return ret;
 
 }
