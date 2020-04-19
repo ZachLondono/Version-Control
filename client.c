@@ -49,17 +49,17 @@ int main(int argc, char** argv) {
         command->type = rollback;
         cmnd_func = &_rollback;
     } else if (strcmp(command_text, "update") == 0) {
-            command->type = update;
-            cmnd_func = &_update;
+        command->type = update;
+        cmnd_func = &_update;
     } else if (strcmp(command_text, "push") == 0) {
-            command->type = push;
-            cmnd_func = &_push;
+        command->type = push;
+        cmnd_func = &_push;
     } else if (strcmp(command_text, "destroy") == 0) {
-            command->type = destroy;
-            cmnd_func = &_destroy;
+        command->type = destroy;
+        cmnd_func = &_destroy;
     } else if (strcmp(command_text, "history") == 0) {
-            command->type = history;
-            cmnd_func = &_history;
+        command->type = history;
+        cmnd_func = &_history;
     } else {
         command->type = 0;
         command->args = malloc(sizeof(char*));
