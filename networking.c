@@ -100,28 +100,20 @@ NetworkCommand* readMessage(int sockfd) {
 
 	if (strcmp(commandname, "check") == 0) {
 		command->type = checknet;
-		command->operation = &_checknet;
 	} else if (strcmp(commandname, "create") == 0) {
 		command->type = createnet;
-		command->operation = &_createnet;
 	} else if (strcmp(commandname, "destroy") == 0) {
 		command->type = destroynet;
-		command->operation = &_destroynet;
 	} else if (strcmp(commandname, "project") == 0) {
 		command->type = projectnet;
-		command->operation = &_projectnet;
 	} else if (strcmp(commandname, "rollback") == 0) {
 		command->type = rollbacknet;
-		command->operation = &_rollbacknet;
 	} else if (strcmp(commandname, "version") == 0) {
 		command->type = versionnet;
-		command->operation = &_versionnet;
 	} else if (strcmp(commandname, "file") == 0) {
 		command->type = filenet;
-		command->operation = &_filenet;
 	} else if (strcmp(commandname, "response") == 0) {
 		command->type = responsenet;
-		command->operation = &_responsenet;
 	} else {
 		char* name = malloc(CMND_NAME_MAX + 1);
 		memcpy(name, commandname, CMND_NAME_MAX + 1);
@@ -141,6 +133,30 @@ NetworkCommand* readMessage(int sockfd) {
 
 }
 
+
+NetworkCommand* newFailureCMND(char* commandName, char* reason) {
+	NetworkCommand* command = malloc(sizeof(NetworkCommand));
+	command->type = responsenet;
+	command->argc = 3;
+	command->argv = malloc(sizeof(char*) * 3);
+	command->arglengths = malloc(sizeof(int) * 3);
+	command->arglengths[0] = strlen(commandName);
+	command->arglengths[1] = 8;
+	command->arglengths[2] = strlen(reason);
+	command->argv[0] = commandName;
+	command->argv[1] = malloc(8);
+	memcpy(command->argv[1], "failure", 8);
+	command->argv[2] = reason;
+	return command;
+}
+
+NetworkCommand* newSuccessCMND(char* commandName, char* reason) {
+	NetworkCommand* command = newFailureCMND(commandName, reason);
+	memcpy(command->argv[1], "success", 8);
+	return command;
+}
+
+
 void freeCMND(NetworkCommand* command) {
 
 	if (!command) {
@@ -158,155 +174,6 @@ void freeCMND(NetworkCommand* command) {
 	}
 	free(command);
 
-}
-
-NetworkCommand* newFailureCMND(char* commandName, char* reason) {
-	NetworkCommand* command = malloc(sizeof(NetworkCommand));
-	command->type = responsenet;
-	command->argc = 3;
-	command->argv = malloc(sizeof(char*) * 3);
-	command->arglengths = malloc(sizeof(int) * 3);
-	command->arglengths[0] = strlen(commandName);
-	command->arglengths[1] = 7;
-	command->arglengths[2] = strlen(reason);
-	command->argv[0] = commandName;
-	command->argv[1] = malloc(8);
-	memcpy(command->argv[1], "failure", 8);
-	command->argv[2] = reason;
-	command->operation = &_responsenet;
-	return command;
-}
-
-NetworkCommand* newSuccessCMND(char* commandName, char* reason) {
-	NetworkCommand* command = malloc(sizeof(NetworkCommand));
-	command->type = responsenet;
-	command->argc = 3;
-	command->argv = malloc(sizeof(char*) * 3);
-	command->arglengths = malloc(sizeof(int) * 3);
-	command->arglengths[0] = strlen(commandName);
-	command->arglengths[1] = 7;
-	command->arglengths[2] = strlen(reason);
-	command->argv[0] = commandName;
-	command->argv[1] = malloc(8);
-	memcpy(command->argv[1], "success", 8);
-	command->argv[2] = reason;
-	command->operation = &_responsenet;
-	return command;
-}
-
-int _responsenet(NetworkCommand* command, int sockfd) {
-
-	// response arg0- command responding to
-	//			arg1- success or failure
-	//			arg2- response data / reason for failure
-
-	if (command->argc != 3) {
-		printf("Error: Recieved malformed message \n");
-		return -1;
-	}
-
-	if (strcmp(command->argv[1], "success") == 0) {
-		printf("Command %s was executed successfully\n", command->argv[0]);
-		return 0;
-	} else if (strcmp(command->argv[1], "failure") == 0) {
-		if (command->argc == 3) printf("Command %s faild to execute: %s\n", command->argv[0], command->argv[2]);
-		else printf("Command %s faild to execute\n", command->argv[0]);
-		return 0;
-	}
-	
-	return -1;
-
-}
-
-int _checknet(NetworkCommand* command, int sockfd) {
-	char* name = malloc(9);
-	memcpy(name, "check", 9);
-	char* reason = malloc(16);
-	memcpy(reason, "not implimented", 16);
-	NetworkCommand* response = newFailureCMND(name, reason);	
-	sendNetworkCommand(response, sockfd);
-	return 0;
-}
-
-int _createnet(NetworkCommand* command, int sockfd) {
-	char* name = malloc(9);
-	memcpy(name, "create", 9);
-	char* reason = malloc(16);
-	memcpy(reason, "not implimented", 16);
-	NetworkCommand* response = newFailureCMND(name, reason);	
-	sendNetworkCommand(response, sockfd);
-	return 0;
-}
-
-int _destroynet(NetworkCommand* command, int sockfd) {
-	char* name = malloc(9);
-	memcpy(name, "destroy", 9);
-	char* reason = malloc(16);
-	memcpy(reason, "not implimented", 16);
-	NetworkCommand* response = newFailureCMND(name, reason);	
-	sendNetworkCommand(response, sockfd);
-	return 0;
-}
-
-int _projectnet(NetworkCommand* command, int sockfd) {
-	char* name = malloc(9);
-	memcpy(name, "project", 9);
-	char* reason = malloc(16);
-	memcpy(reason, "not implimented", 16);
-	NetworkCommand* response = newFailureCMND(name, reason);	
-	sendNetworkCommand(response, sockfd);
-	return 0;
-}
-
-int _rollbacknet(NetworkCommand* command, int sockfd) {
-	char* name = malloc(9);
-	memcpy(name, "rollback", 9);
-	char* reason = malloc(16);
-	memcpy(reason, "not implimented", 16);
-	NetworkCommand* response = newFailureCMND(name, reason);	
-	sendNetworkCommand(response, sockfd);
-	return 0;
-}
-
-int _versionnet(NetworkCommand* command, int sockfd) {
-	// version  arg0- project name
-	char* name = malloc(9);
-	memcpy(name, "version", 9);
-
-	if (command->argc != 1) {
-		printf("Error: Malformed message from client\n");
-		NetworkCommand* response = newFailureCMND(name, "Malformed message");	
-		sendNetworkCommand(response, sockfd);
-		freeCMND(response);
-		return -1;
-	}
-
-	if (!checkForLocalProj(command->argv[0])) {
-		printf("Error: Request for invalid project from client\n");
-		NetworkCommand* response = newFailureCMND(name, "Project doesn not exist");	
-		sendNetworkCommand(response, sockfd);
-		freeCMND(response);
-		return -1;
-	}
-
-	int version = projectVersion(command->argv[0]);
-	char* reason = malloc(digitCount(version) + 1);
-	memset(reason, '\0', digitCount(version) + 1);
-	snprintf(reason, digitCount(version)+1, "%d", version);
-	NetworkCommand* response = newSuccessCMND(name, reason);
-	sendNetworkCommand(response, sockfd);
-	freeCMND(response);
-	return 0;
-}
-
-int _filenet(NetworkCommand* command, int sockfd) {
-	char* name = malloc(9);
-	memcpy(name, "file", 9);
-	char* reason = malloc(16);
-	memcpy(reason, "not implimented", 16);
-	NetworkCommand* response = newFailureCMND(name, reason);	
-	sendNetworkCommand(response, sockfd);
-	return 0;
 }
 
 char* readSection(int fd, int upperbound, char** contbuffer, int* buffersize, int ignoreDelim) {   // buffersize will always be at least the size of buffersize after function execute
