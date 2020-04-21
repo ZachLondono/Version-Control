@@ -1,6 +1,29 @@
 #include "servercommands.h"
 #include <errno.h>
 
+pthread_mutex_t repo_lock = PTHREAD_MUTEX_INITIALIZER;
+
+int servercheckForLocalProj(char* projectname) {
+	pthread_mutex_lock(&repo_lock);
+	int ret = checkForLocalProj(projectname);
+	pthread_mutex_unlock(&repo_lock);
+	return ret;
+}
+
+FileContents* serverreadfile(char* name) {
+	pthread_mutex_lock(&repo_lock);
+	FileContents* content = readfile(name);
+	pthread_mutex_unlock(&repo_lock);
+	return content;
+}
+
+ssize_t serverwrite(int fd, char* buff, int count) {
+	pthread_mutex_lock(&repo_lock);
+	ssize_t ret = write(fd, buff, count);
+	pthread_mutex_unlock(&repo_lock);
+	return ret;
+}
+
 int _responsenet(NetworkCommand* command, int sockfd) {
 
 	// response arg0- command responding to
@@ -139,8 +162,8 @@ int _versionnet(NetworkCommand* command, int sockfd) {
 		freeCMND(response);
 		return -1;
 	}
-
-	int version = projectVersion(command->argv[0]);
+	
+	int version = projectVersion(command->argv[0], &serverreadfile);
 	char* reason = malloc(digitCount(version) + 1);
 	memset(reason, '\0', digitCount(version) + 1);
 	snprintf(reason, digitCount(version)+1, "%d", version);

@@ -1,6 +1,11 @@
 #ifndef SERVERCMNDS
 #define SERVERCMNDS
+#include <pthread.h>
 #include "networking.h"
+
+int servercheckForLocalProj(char* projectname);
+FileContents* serverreadfile(char* name);
+ssize_t serverwrite(int fd, char* buff, int count);
 
 int _responsenet(NetworkCommand* command, int sockfd);
 int _checknet(NetworkCommand* command, int sockfd);
