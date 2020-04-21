@@ -7,24 +7,30 @@
 
 int main(int argc, char** argv) {
 
+    /* 
+     * check the arguments passed in for the type of command and its arguments
+     * then check if the argument count matches the given command, and create a command struct
+     * then call the associated function which will execute the necessary code for the function.
+     */
+
     ClientCommand* command = malloc(sizeof(ClientCommand)); 
     int (*cmnd_func)(ClientCommand*);
 
-    if (argc < 3 || argc > 4) {
+    if (argc < 3 || argc > 4) {		// all commands have at least 3 arguments or at most 4
         command->type = 0;
-        command->args = malloc(sizeof(char*));
+        command->args = malloc(sizeof(char*));		// creating an invalid command rather then just exiting so that memory freeing can be all handled at the end
         command->args[0] = "Invalid argument count";
         cmnd_func = &_invalidcommand;
-        goto skip;
+        goto skip;			// skip all other argument parsing
     }
 
     // figure out what type of command is being executed
     char* command_text = argv[1];
-    int arg_count = 1;
+    int arg_count = 1;			// most commands have 1 argument, so that is the default
     if (strcmp(command_text, "configure") == 0) {
-        arg_count = 2;
-        command->type = configure;
-        cmnd_func = &_configure;
+        arg_count = 2;			// set the expected number of arguments that should be passed to the program
+        command->type = configure;	// set the type of command that was given
+        cmnd_func = &_configure;	// assign the function to be called if command was structured correctly
     } else if (strcmp(command_text, "checkout") == 0) {             
         command->type = checkout;
         cmnd_func = &_checkout;
@@ -68,7 +74,7 @@ int main(int argc, char** argv) {
         goto skip;
     }
 
-    if (argc - 2 != arg_count) {
+    if (argc - 2 != arg_count) {	// check that given argument count matches expected argument count
         command->type = 0;
         command->args = malloc(sizeof(char*));
         command->args[0] = "Invalid argument count";
@@ -76,14 +82,14 @@ int main(int argc, char** argv) {
         goto skip;
     }
 
-    // retrieve arguments
+    // retrieve arguments, save them in the command struct
     command->args = malloc(sizeof(char*) * arg_count);
     command->args[0] = argv[2];
     if (arg_count == 2) command->args[1] = argv[3];
 
     //execute associated function
     skip: ;
-    int ret = (*cmnd_func)(command);
+    int ret = (*cmnd_func)(command);	// execute command's associated function
     free(command->args);
     free(command);
 

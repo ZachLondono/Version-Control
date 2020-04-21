@@ -1,7 +1,10 @@
 #include "clientcommands.h"
 
 //invalid=0, configure=1, checkout=2, update=3, upgrade=4, commit=5, push=6, create=7, destroy=8, add=9, remove_cmnd=10, currentversion=11, history=12, rollback=13
-int connectwithconfig() {	// load config file and connect to host with it
+
+
+// Will load connection details from a .Config file on local path and attempt to connect with them, returns file descriptor of connection or -1 if it failed
+int connectwithconfig() {	
 	Configuration* config = loadConfig();
 	if (config == NULL) return -1;
 	int sockfd = connecttohost(config->host, config->port);
@@ -9,6 +12,7 @@ int connectwithconfig() {	// load config file and connect to host with it
 	return sockfd;
 }
 
+// Initialize and allocate a new NetworkCommand from a ClientCommand to be sent to the server to request some data
 NetworkCommand* newrequest(ClientCommand* command, int argc) {
     
     NetworkCommand* request = malloc(sizeof(NetworkCommand));
@@ -28,13 +32,18 @@ NetworkCommand* newrequest(ClientCommand* command, int argc) {
 
 }
 
+// Print out reason that command was invalid
 int _invalidcommand(ClientCommand* command) {
-    //TODO maybe set type of invalid command in parse command?
     printf("Fatal Error: %s\n", command->args[0]);
     return 0;
 }
 
 int _configure(ClientCommand* command) {
+
+    // Takes in 2 argument <ip/host> and <port>
+    // ip/host must be at most HOST_NAME_MAX bytes long
+    // port must be a positive integer no longer than 16 bits, 65535
+    // a .Config file will be created in the cwd and have both of these values written to it
 
     if (strlen(command->args[0]) > HOST_NAME_MAX + 1){
         printf("Error: Invalid host name length, max hostname on this system is %d\n", HOST_NAME_MAX);
@@ -103,6 +112,10 @@ int _push(ClientCommand* command) {
 
 int _create(ClientCommand* command) {
     
+    // Will send a request to the server to create a new project within the repository
+    // then wait for a response to see if it was done successfully
+    // command takes one argument <project name>
+
     NetworkCommand* request = newrequest(command, 1);
     request->type = createnet;
 
@@ -115,14 +128,14 @@ int _create(ClientCommand* command) {
     NetworkCommand* response = readMessage(sockfd);
     close(sockfd);
     
-    if (response->argc != 3 || strcmp(response->argv[0], "create") != 0) {
+    if (response->argc != 3 || strcmp(response->argv[0], "create") != 0) { 	// valid responses to the create request will contain 3 arguments
         printf("Error: Malformed response from server\n");
         freeCMND(response);
         return -1;
     }
 
-    if (strcmp(response->argv[1], "failure") == 0) {
-        printf("Error: server failed to create the project: %s\n", response->argv[2]);
+    if (strcmp(response->argv[1], "failure") == 0) {				// if the request failed, tell the user
+        printf("Error: server failed to create the project: %s\n", response->argv[2]);	// argument 3 will contain the reason for the request failing
         freeCMND(response);
         return -1;
     }
@@ -194,6 +207,9 @@ int _rollback(ClientCommand* command) {
 }
 
 Configuration* loadConfig() {
+
+    // Will check that the configuration file (.config) exists and is formatted correctly and contains a valid configuration
+    // if it is not/does not it will warn the user of the error and requuire that the user run the configuration command again.
 
     FileContents* file = readfile("./.config");
     char* buffer = file->content;

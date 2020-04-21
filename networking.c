@@ -130,12 +130,16 @@ NetworkCommand* readMessage(int sockfd) {
 
 }
 
+// Utilizies a continuous buffer shared between function calls to ensure no data is lost while minimizing read calls to increase efficiency
+// of reading an unknown number of arbitrarily long sections which are either deliminated or of known length
 char* readSection(int fd, int upperbound, char** contbuffer, int* buffersize, int ignoreDelim) {   // buffersize will always be at least the size of buffersize after function execute
 
     if (!(*contbuffer)) {
 		printf("Error: continuous buffer is null\n");
 		return NULL;
-	}
+    }
+
+    // The following code maintains the buffer and changes it's size/contents if neccessary
     size_t populatedbytes = strlen((*contbuffer));                          // number of bytes already read in
     if (populatedbytes <= upperbound) {                                     // check if enough bytes have been read already
         if (*buffersize <= upperbound) {                                    // if enough have not been read, make sure there is room in the buffer
@@ -158,6 +162,7 @@ char* readSection(int fd, int upperbound, char** contbuffer, int* buffersize, in
 		(*contbuffer)[upperbound] = '\0';                                      //make sure buffer ends with null byte
     }
 
+    // The following code will parse out the desired section of data, and discard the deliminers if not ignored, or include them if ignored
     char* ret = malloc(upperbound + 1);
     if (!ret) {
         printf("Error: failed to allocate memory, buy some more ram you cheapskate, I only need %d more bytes...\n",    upperbound + 1);
@@ -192,12 +197,15 @@ char* readSection(int fd, int upperbound, char** contbuffer, int* buffersize, in
 
 }
 
+// Convert the NetworkCommand struct into a char* which matches the network protocoll specifications
 int sendNetworkCommand(NetworkCommand* command, int sockfd) {
 
+	// Allocate enough memory to store the entire message
 	int messagelen = CMND_NAME_MAX + 2 + digitCount(command->argc);
 	int i = 0;
 	for (i = 0; i < command->argc; i++) messagelen += command->arglengths[i] + 1 + digitCount(command->arglengths[i]);
 
+	// Append the correct request type to the message
 	char* message = malloc(messagelen);
 	if (!message) return -1;
 	memset(message,'\0', messagelen);
@@ -257,6 +265,9 @@ int sendNetworkCommand(NetworkCommand* command, int sockfd) {
 		strcat(message,command->argv[i]);
 	}
 
+	
+	// network protocoll structure: <command>:<argument count>:<argument 1 length>:<argument 1><argument 2 length>:<argument 3> ...
+	// note: there is no deliminer between an argument's content and it's following argument's length
 	int ret = write(sockfd, message, messagelen);
 
 	free(message);
