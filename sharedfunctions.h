@@ -27,8 +27,8 @@ void freefile(FileContents* file);
 int isNum(char* value, int len);
 int digitCount(int num);
 int strshift(char* word, size_t buffsize, int offset);
-int incrimentManifest(char* project);
-int projectVersion(char* project);
+int incrimentManifest(char* project, FileContents* (*readfile)(char*), ssize_t (*write)(int fd, char* buff, int count));
+int projectVersion(char* project, FileContents* (*readfile)(char*));
 int getManifestVersion(FileContents* manifest);
 
 #endif

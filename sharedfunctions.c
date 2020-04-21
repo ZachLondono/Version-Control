@@ -77,7 +77,7 @@ int strshift(char* word, size_t buffsize, int offset) {
     return 0;
 }
 
-int incrimentManifest(char* project) {
+int incrimentManifest(char* project, FileContents* (*readfilepntr)(char*), ssize_t (*writepntr)(int fd, char* buff, int count)) {
 
     int path_size = strlen(project) + 13;
     char* path = malloc(path_size);
@@ -86,7 +86,7 @@ int incrimentManifest(char* project) {
     strcat(path,project);
     strcat(path,"/.Manifest");
 
-    FileContents* manifest = readfile(path);
+    FileContents* manifest = (*readfilepntr)(path);
     if (!manifest) return -1;
     int version = getManifestVersion(manifest);
     if (version < 0) {
@@ -102,8 +102,8 @@ int incrimentManifest(char* project) {
 
     int tmpfd = open("./.Manifest.tmp", O_RDWR | O_CREAT, S_IRWXU);
 
-    write(tmpfd, version_s, digc);
-    write(tmpfd, &manifest->content[digc], manifest->size-digc);
+    (*writepntr)(tmpfd, version_s, digc);
+    (*writepntr)(tmpfd, &manifest->content[digc], manifest->size-digc);
 
     free(version_s);
     freefile(manifest);
@@ -118,7 +118,7 @@ int incrimentManifest(char* project) {
 
 }
 
-int projectVersion(char* project) {
+int projectVersion(char* project, FileContents* (*readfilepntr)(char*)) {
 
     int path_size = strlen(project) + 13;
     char* path = malloc(path_size);
@@ -127,7 +127,7 @@ int projectVersion(char* project) {
     strcat(path,project);
     strcat(path,"/.Manifest");
 
-    FileContents* manifest = readfile(path);
+    FileContents* manifest = readfilepntr(path);
     free(path);
     int ret = getManifestVersion(manifest);
     freefile(manifest);
