@@ -32,6 +32,24 @@ NetworkCommand* newrequest(ClientCommand* command, int argc) {
 
 }
 
+int checkresponse(char* command, NetworkCommand* response) {
+    
+    if (response->argc != 3 || strcmp(response->argv[0], command) != 0) { 	// valid responses to the create request will contain 3 arguments
+        printf("Error: Malformed response from server\n");
+        freeCMND(response);
+        return -1;
+    }
+
+    if (strcmp(response->argv[1], "failure") == 0) {				// if the request failed, tell the user
+        printf("Error: server failed to create the project: %s\n", response->argv[2]);	// argument 3 will contain the reason for the request failing
+        freeCMND(response);
+        return -1;
+    }
+
+    return 0;
+
+}
+
 // Print out reason that command was invalid
 int _invalidcommand(ClientCommand* command) {
     printf("Fatal Error: %s\n", command->args[0]);
@@ -128,17 +146,7 @@ int _create(ClientCommand* command) {
     NetworkCommand* response = readMessage(sockfd);
     close(sockfd);
     
-    if (response->argc != 3 || strcmp(response->argv[0], "create") != 0) { 	// valid responses to the create request will contain 3 arguments
-        printf("Error: Malformed response from server\n");
-        freeCMND(response);
-        return -1;
-    }
-
-    if (strcmp(response->argv[1], "failure") == 0) {				// if the request failed, tell the user
-        printf("Error: server failed to create the project: %s\n", response->argv[2]);	// argument 3 will contain the reason for the request failing
-        freeCMND(response);
-        return -1;
-    }
+    if (checkresponse("create", response) < 0) return -1;
 
     printf("Project %s has been created on the repository\n", command->args[0]);
 
@@ -177,17 +185,7 @@ int _currentversion(ClientCommand* command) {
     NetworkCommand* response = readMessage(sockfd);
     close(sockfd);
     
-    if (response->argc != 3 || strcmp(response->argv[0], "version") != 0) {
-        printf("Error: Malformed response from server\n");
-        freeCMND(response);
-        return -1;
-    }
-
-    if (strcmp(response->argv[1], "failure") == 0) {
-        printf("Error: server failed to recieve current version: %s\n", response->argv[2]);
-        freeCMND(response);
-        return -1;
-    }
+    if (checkresponse("version", response) < 0) return -1;     // check the response if valid
 
     printf("Project version: %s\n", response->argv[2]); 
     
