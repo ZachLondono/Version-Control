@@ -50,8 +50,10 @@ int _responsenet(NetworkCommand* command, int sockfd) {
 
 int _checknet(NetworkCommand* command, int sockfd) {
 	char* name = malloc(9);
+	memset(name, '\0', 9);
 	memcpy(name, "check", 9);
 	char* reason = malloc(16);
+	memset(reason, '\0', 16);
 	memcpy(reason, "not implimented", 16);
 	NetworkCommand* response = newFailureCMND(name, reason);	
 	sendNetworkCommand(response, sockfd);

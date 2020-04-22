@@ -58,12 +58,14 @@ NetworkCommand* readMessage(int sockfd) {
 		memset(commandname, '\0', CMND_NAME_MAX + 1);
 		memcpy(commandname, "unknown", 7);
 		char* reason = malloc(28);
+		memset(reason, '\0', 28);
 		memcpy(reason, "Failed to read command name", 28);
 		return newFailureCMND(commandname, reason);
 	}
 	char* argc_s = readSection(sockfd, 5, &contbuffer, &buffersize, 0);
 	if (!argc_s) {	// if argc_s is null, the value overflowed the upperbounds of the buffer
 		char* reason = malloc(30);
+		memset(reason, '\0', 30);
 		memcpy(reason, "Failed to read argument count", 30);
 		return newFailureCMND(commandname, reason);
 	}
@@ -78,7 +80,8 @@ NetworkCommand* readMessage(int sockfd) {
 		
 		char* size_s = readSection(sockfd, 3, &contbuffer, &buffersize, 0);	// read in the length of the argument in bytes
 		if (!size_s) {	// if size_s is null, the value is more digits than the upperbounds
-			char* reason = malloc(29);
+			char* reason = malloc(29);		
+			memset(reason, '\0', 29);
 			memcpy(reason, "Failed to read argument size", 29);
 			return newFailureCMND(commandname, reason);		
 		}
@@ -116,10 +119,12 @@ NetworkCommand* readMessage(int sockfd) {
 		command->type = responsenet;
 	} else {
 		char* name = malloc(CMND_NAME_MAX + 1);
+		memset(name, '\0', CMND_NAME_MAX + 1);
 		memcpy(name, commandname, CMND_NAME_MAX + 1);
 		free(commandname);
 		freeCMND(command);
 		char* reason = malloc(28);
+		memset(reason, '\0', 28);
 		memcpy(reason, "Failed to read command name", 28);
 		return newFailureCMND(name, reason);
 	}
@@ -254,7 +259,6 @@ int sendNetworkCommand(NetworkCommand* command, int sockfd) {
 	strcat(message,":");
 	
 	for (i = 0; i < command->argc; i++) {
-		
 		l = digitCount(command->arglengths[i]);
 		char* arg = malloc(l+1);
 		if (!arg) return -1;
@@ -269,7 +273,6 @@ int sendNetworkCommand(NetworkCommand* command, int sockfd) {
 	// network protocoll structure: <command>:<argument count>:<argument 1 length>:<argument 1><argument 2 length>:<argument 3> ...
 	// note: there is no deliminer between an argument's content and it's following argument's length
 	int ret = write(sockfd, message, messagelen);
-
 	free(message);
 
 	return ret;
@@ -287,14 +290,15 @@ NetworkCommand* newFailureCMND(char* commandName, char* reason) {
 	command->arglengths[2] = strlen(reason);
 	command->argv[0] = commandName;
 	command->argv[1] = malloc(8);
-	memcpy(command->argv[1], "failure", 7);
+	memset(command->argv[1],'\0', 8);
+	memcpy(command->argv[1], "failure", 8);
 	command->argv[2] = reason;
 	return command;
 }
 
 NetworkCommand* newSuccessCMND(char* commandName, char* reason) {
 	NetworkCommand* command = newFailureCMND(commandName, reason);
-	memcpy(command->argv[1], "success", 7);
+	memcpy(command->argv[1], "success", 8);
 	return command;
 }
 
