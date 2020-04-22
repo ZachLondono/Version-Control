@@ -7,21 +7,58 @@
 #include <sys/socket.h>
 #include <errno.h>
 #include <arpa/inet.h>
+#include <signal.h>
 #include "networking.h"
 #include "sharedfunctions.h"
 #include "servercommands.h"
+#include "queue.h"
 
-void* threadentry(void* value) {
+#define THREAD_POOL_SIZE 10
+pthread_mutex_t queue_lock = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t new_command = PTHREAD_COND_INITIALIZER;
+pthread_t thread_pool[THREAD_POOL_SIZE];
+int serveractive = 1;
 
-	int clisockfd = *(int*)value;
+void* executecommandthread(int* value) {
+
+	int clisockfd = *(value);
+    free(value);
 
 	NetworkCommand* message =  readMessage(clisockfd);
-
 	printf("LOG: Message recieved from client -> %d\n", message->type);
 	executecommand(message, clisockfd);
 	freeCMND(message);
 
 	return NULL;
+
+}
+
+void* threadentry(void* value) {
+	while (serveractive) {
+        pthread_mutex_lock(&queue_lock);
+        int* node = dequeue();
+        if (node == NULL) {
+            pthread_cond_wait(&new_command, &queue_lock);
+            node = dequeue();
+        }
+        pthread_mutex_unlock(&queue_lock);
+		if (node == NULL) continue;
+		executecommandthread(node);
+	}
+    printf("exiting thread\n");
+    return NULL;
+}
+
+void inturupthandler() {
+    serveractive = 0;
+    int i = 0;
+    for ( i = 0; i < THREAD_POOL_SIZE; i++) {
+        pthread_cond_signal(&new_command);
+    }
+    for ( i = 0; i < THREAD_POOL_SIZE; i++) {
+        pthread_join(thread_pool[i], NULL);
+    }
+    exit(0);
 }
 
 int main(int argc, char** argv) {
@@ -61,6 +98,15 @@ int main(int argc, char** argv) {
 	struct sockaddr_in cli_addr;
 	socklen_t clilen = sizeof(cli_addr);
 
+	int i = 0;
+	for(i = 0; i < THREAD_POOL_SIZE; i++) {
+		pthread_create(&thread_pool[i], NULL, threadentry, NULL);
+	}
+    if(signal(SIGINT, inturupthandler) == SIG_ERR) {
+        printf("Error: couldn't set handler for inturupt signal,\n");
+        return -1;
+    }
+
 	int clisockfd = 0;
 	while (1) {
 		
@@ -73,15 +119,16 @@ int main(int argc, char** argv) {
 
 		printf("Successful connection from: %s\n", inet_ntoa((&cli_addr)->sin_addr));
 
-		pthread_t thread;
-		pthread_create(&thread, NULL, threadentry, &clisockfd);
-		pthread_join(thread, NULL);
+		int* fd = malloc(sizeof(int));
+		*fd = clisockfd;
+        pthread_mutex_lock(&queue_lock);
+        pthread_cond_signal(&new_command);
+		enqueue(fd);	
+        pthread_mutex_unlock(&queue_lock);
 
 	}
 
 	printf("An error occured while accepting new connections: %s\n", strerror(errno));
-
-	// TODO: close all threads
 
 	return 0;
 
