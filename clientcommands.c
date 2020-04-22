@@ -41,7 +41,7 @@ int checkresponse(char* command, NetworkCommand* response) {
     }
 
     if (strcmp(response->argv[1], "failure") == 0) {				// if the request failed, tell the user
-        printf("Error: server failed to create the project: %s\n", response->argv[2]);	// argument 3 will contain the reason for the request failing
+        printf("Error: server failed to execute command: %s\n", response->argv[2]);	// argument 3 will contain the reason for the request failing
         freeCMND(response);
         return -1;
     }
@@ -148,7 +148,7 @@ int _create(ClientCommand* command) {
     
     if (checkresponse("create", response) < 0) return -1;
 
-    printf("Project %s has been created on the repository\n", command->args[0]);
+    printf("Project '%s' has been created in the repository\n", command->args[0]);
 
     freeCMND(response);
     
@@ -210,11 +210,11 @@ Configuration* loadConfig() {
     // if it is not/does not it will warn the user of the error and requuire that the user run the configuration command again.
 
     FileContents* file = readfile("./.config");
-    char* buffer = file->content;
-    if (buffer == NULL) {
+    if (file == NULL) {
         printf("Error: .config file does not exist or has incorrect permissions\n");
         return NULL;
     }
+    char* buffer = file->content;
     size_t size = strlen(buffer);
 
     // file is blank or jus has empty lines host:\nport:\n
