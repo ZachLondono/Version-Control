@@ -25,7 +25,7 @@ void* executecommandthread(int* value) {
     free(value);
 
 	NetworkCommand* message =  readMessage(clisockfd);
-	printf("LOG: Message recieved from client -> %d\n", message->type);
+	printf("Message recieved from client -> %d\n", message->type);
 	executecommand(message, clisockfd);
 	freeCMND(message);
 
@@ -45,7 +45,6 @@ void* threadentry(void* value) {
 		if (node == NULL) continue;
 		executecommandthread(node);
 	}
-    printf("exiting thread\n");
     return NULL;
 }
 
@@ -58,6 +57,7 @@ void inturupthandler() {
     for ( i = 0; i < THREAD_POOL_SIZE; i++) {
         pthread_join(thread_pool[i], NULL);
     }
+    write(1, "\n", 1);
     exit(0);
 }
 
