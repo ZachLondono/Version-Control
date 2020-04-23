@@ -16,7 +16,6 @@ void hashtohexprint(unsigned char* hash) {
     printf("\n");
 }
 
-
 unsigned char* hashdata(unsigned char* data, size_t datalen) {
 	unsigned char* hash = malloc(SHA_DIGEST_LENGTH);
 	SHA1(data, datalen, hash);
@@ -31,8 +30,8 @@ FileContents* readfile(char* name) {
     stat(name, &filestat);
     size_t size = filestat.st_size;
 
-    char* buffer = malloc(size);
-    memset(buffer, '\0', size);
+    char* buffer = malloc(size + 1);
+    memset(buffer, '\0', size + 1);
 
     int status = 0;
     int bytesread = 0;

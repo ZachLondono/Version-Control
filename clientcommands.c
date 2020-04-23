@@ -77,19 +77,19 @@ int _configure(ClientCommand* command) {
         return -1;    
     }
 
-    remove("./config");
+    remove("./.config");
     int fd_config = open("./.config", O_RDWR | O_CREAT, S_IWUSR | S_IRUSR);
     if (fd_config == -1) {
         printf("Error: couldn't create .config file\n");
         return -1;
     }
 
-    int size = strlen(command->args[0]) + strlen(command->args[0]) + 11;
+    int size = strlen(command->args[0]) + strlen(command->args[1]) + 13;
     char* filecontents = malloc(sizeof(char) * (size));
     memset(filecontents, '\0', size);
     snprintf(filecontents, size, "host:%s\nport:%s\n", command->args[0], command->args[1]);
 
-    if (write(fd_config, filecontents, strlen(filecontents)) == -1) {
+    if (write(fd_config, filecontents, size - 1 ) == -1) {
         printf("Error: couldn't write to .config file\n");
         return -1;
     }
@@ -177,7 +177,10 @@ int _currentversion(ClientCommand* command) {
     request->type = versionnet;
 
     int sockfd = connectwithconfig();
-    if (sockfd < 0) return sockfd;
+    if (sockfd < 0) {
+        freeCMND(request);
+        return sockfd;
+    }
 
     sendNetworkCommand(request, sockfd);
     freeCMND(request);
