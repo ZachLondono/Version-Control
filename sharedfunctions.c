@@ -9,12 +9,13 @@ int checkForLocalProj(char* projname) {
 }
 
 void hashtohexprint(unsigned char* hash) {
-	int i = 0;
-	for (i = 0; i < SHA_DIGEST_LENGTH; i++) {
-		printf(" %2x", (unsigned char) hash[i]);
-	}
-	printf("\n");
+    int i = 0;
+    for (i = 0; i < SHA_DIGEST_LENGTH; i++) {
+        printf(" %2x", (unsigned char) hash[i]);
+    }
+    printf("\n");
 }
+
 
 unsigned char* hashdata(unsigned char* data, size_t datalen) {
 	unsigned char* hash = malloc(SHA_DIGEST_LENGTH);
@@ -31,10 +32,11 @@ FileContents* readfile(char* name) {
     size_t size = filestat.st_size;
 
     char* buffer = malloc(size);
+    memset(buffer, '\0', size);
 
     int status = 0;
     int bytesread = 0;
-    while ((status = read(fd, buffer, size - bytesread)) != 0) bytesread += status;
+    while ((status = read(fd, &buffer[bytesread], size - bytesread)) != 0) bytesread += status;
     // close(fd);
 
     FileContents* file = malloc(sizeof(FileContents));
@@ -65,10 +67,10 @@ int digitCount(int num) {
 	return count;
 }
 
-int strshift(char* word, size_t buffsize, int offset) {
+int strshift(char* word, int populated, size_t buffsize, int offset) {
     if (offset > buffsize) return -1;
     if (!word) return -1;
-    size_t usedbytes = strlen(word);
+    size_t usedbytes = populated;
     if (usedbytes == 0) return -1;
     int i = 0;
     for(i = 0; i + offset < buffsize; i++) 
@@ -168,11 +170,11 @@ int getManifestVersion(FileContents* manifest) {
 char* getcompressedfile(char* filepath, int* deflated_size) {
 
 	int pathlen = strlen(filepath);
-	int cmndlen = 16 + 7 + pathlen;
+	int cmndlen = 26 + pathlen;
 
 	char* tarcmnd = malloc(cmndlen);
 	memset(tarcmnd,'\0', cmndlen);
-	snprintf(tarcmnd, cmndlen, "tar -czvf archive.tar %s", filepath);
+	snprintf(tarcmnd, cmndlen, "tar -czf archive.tar.gz %s", filepath);
 	system(tarcmnd);
 	free(tarcmnd);
 
@@ -182,9 +184,9 @@ char* getcompressedfile(char* filepath, int* deflated_size) {
 		return NULL;
 	}
 
-    	struct stat filestat;
-    	stat("archive.tar", &filestat);
-    	size_t size = filestat.st_size;
+    struct stat filestat;
+    stat("archive.tar.gz", &filestat);
+    size_t size = filestat.st_size;
 	*deflated_size = size;
 
 	char* deflated_content = malloc(size);
@@ -193,7 +195,7 @@ char* getcompressedfile(char* filepath, int* deflated_size) {
 
 	close(fd);
 
-	if (remove("archive.tar") != 0) printf("Error: couldn't remove temporary files\n");
+	if (remove("archive.tar.gz") != 0) printf("Error: couldn't remove temporary files\n");
 
 	return deflated_content;
 	
@@ -204,6 +206,7 @@ int recreatefile(char* filepath, char* contents, int size) {
 	if (fd < 0) printf("Error: failed to recreate file\n");
 	else write(fd, contents, size);
 	close(fd);
+    return fd >= 0 ? 0 : -1;
 }
 
 int uncompressfile(char* compressedpath) {
@@ -213,10 +216,13 @@ int uncompressfile(char* compressedpath) {
 
 	char* tarcmnd = malloc(cmndlen);
 	memset(tarcmnd,'\0', cmndlen);
-	snprintf(tarcmnd, cmndlen, "tar -xvf %s", compressedpath);
-	system(tarcmnd);
+	snprintf(tarcmnd, cmndlen, "tar -xf %s", compressedpath);
+	int ret = system(tarcmnd);
 	free(tarcmnd);
 
-	if(remove(compressedpath) != 0) printf("Error: couldn't remove temporary files\n");
+	if(remove(compressedpath) != 0) {
+        printf("Error: couldn't remove temporary files\n");
+    }
+    return ret;
 
 }
