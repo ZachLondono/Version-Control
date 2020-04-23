@@ -2,7 +2,6 @@
 
 //invalid=0, configure=1, checkout=2, update=3, upgrade=4, commit=5, push=6, create=7, destroy=8, add=9, remove_cmnd=10, currentversion=11, history=12, rollback=13
 
-
 // Will load connection details from a .Config file on local path and attempt to connect with them, returns file descriptor of connection or -1 if it failed
 int connectwithconfig() {	
 	Configuration* config = loadConfig();
@@ -16,7 +15,7 @@ int connectwithconfig() {
 NetworkCommand* newrequest(ClientCommand* command, int argc) {
     
     NetworkCommand* request = malloc(sizeof(NetworkCommand));
-    request->argc = 1;
+    request->argc = argc;
     request->arglengths = malloc(sizeof(int) * argc);
     request->argv = malloc(sizeof(char*) * argc);
 
@@ -78,6 +77,7 @@ int _configure(ClientCommand* command) {
         return -1;    
     }
 
+    remove("./config");
     int fd_config = open("./.config", O_RDWR | O_CREAT, S_IWUSR | S_IRUSR);
     if (fd_config == -1) {
         printf("Error: couldn't create .config file\n");
@@ -87,9 +87,9 @@ int _configure(ClientCommand* command) {
     int size = strlen(command->args[0]) + strlen(command->args[0]) + 11;
     char* filecontents = malloc(sizeof(char) * (size));
     memset(filecontents, '\0', size);
-    snprintf(filecontents, size, "host:%s\nport:%s", command->args[0], command->args[1]);
+    snprintf(filecontents, size, "host:%s\nport:%s\n", command->args[0], command->args[1]);
 
-    if (write(fd_config, filecontents, size) == -1) {
+    if (write(fd_config, filecontents, strlen(filecontents)) == -1) {
         printf("Error: couldn't write to .config file\n");
         return -1;
     }
@@ -199,7 +199,7 @@ int _history(ClientCommand* command) {
     return -1;
 }
 
-int _rollback(ClientCommand* command) {
+int _rollback(ClientCommand* command) {    
     printf("rollback not implimented\n");
     return -1;
 }
