@@ -49,10 +49,11 @@ NetworkCommand* readMessage(int sockfd) {
 	}
 
 	int buffersize = 200;
+	int populatedbytes = 0;
 	char* contbuffer = malloc(buffersize);
 	memset(contbuffer, '\0', buffersize);
 
-	char* commandname = readSection(sockfd, CMND_NAME_MAX, &contbuffer, &buffersize, 0);
+	char* commandname = readSection(sockfd, CMND_NAME_MAX, &contbuffer, &buffersize, &populatedbytes, 0);
 	if (!commandname) {	// if command name was null, it was larger than max length
 		commandname = malloc(CMND_NAME_MAX + 1);
 		memset(commandname, '\0', CMND_NAME_MAX + 1);
@@ -62,7 +63,7 @@ NetworkCommand* readMessage(int sockfd) {
 		memcpy(reason, "Failed to read command name", 28);
 		return newFailureCMND(commandname, reason);
 	}
-	char* argc_s = readSection(sockfd, 5, &contbuffer, &buffersize, 0);
+	char* argc_s = readSection(sockfd, 5, &contbuffer, &buffersize, &populatedbytes, 0);
 	if (!argc_s) {	// if argc_s is null, the value overflowed the upperbounds of the buffer
 		char* reason = malloc(30);
 		memset(reason, '\0', 30);
@@ -78,7 +79,7 @@ NetworkCommand* readMessage(int sockfd) {
 	int i = 0;
 	for(i = 0; i < argc; i++) {
 		
-		char* size_s = readSection(sockfd, 3, &contbuffer, &buffersize, 0);	// read in the length of the argument in bytes
+		char* size_s = readSection(sockfd, 4, &contbuffer, &buffersize, &populatedbytes, 0);	// read in the length of the argument in bytes
 		if (!size_s) {	// if size_s is null, the value is more digits than the upperbounds
 			char* reason = malloc(29);		
 			memset(reason, '\0', 29);
@@ -90,7 +91,7 @@ NetworkCommand* readMessage(int sockfd) {
 		arglengths[i] = size;
 		free(size_s);
 
-		char* buffer = readSection(sockfd, size, &contbuffer, &buffersize, 1);
+		char* buffer = readSection(sockfd, size, &contbuffer, &buffersize, &populatedbytes, 1);
 		argv[i] = buffer;
 	}
 	
@@ -101,9 +102,7 @@ NetworkCommand* readMessage(int sockfd) {
 	command->arglengths = arglengths;
 	command->argv = argv;
 
-	if (strcmp(commandname, "check") == 0) {
-		command->type = checknet;
-	} else if (strcmp(commandname, "create") == 0) {
+	if (strcmp(commandname, "create") == 0) {
 		command->type = createnet;
 	} else if (strcmp(commandname, "destroy") == 0) {
 		command->type = destroynet;
@@ -137,7 +136,7 @@ NetworkCommand* readMessage(int sockfd) {
 
 // Utilizies a continuous buffer shared between function calls to ensure no data is lost while minimizing read calls to increase efficiency
 // of reading an unknown number of arbitrarily long sections which are either deliminated or of known length
-char* readSection(int fd, int upperbound, char** contbuffer, int* buffersize, int ignoreDelim) {   // buffersize will always be at least the size of buffersize after function execute
+char* readSection(int fd, int upperbound, char** contbuffer, int* buffersize, int* populatedbytes, int ignoreDelim) {   // buffersize will always be at least the size of buffersize after function execute
 
     if (!(*contbuffer)) {
 		printf("Error: continuous buffer is null\n");
@@ -145,21 +144,21 @@ char* readSection(int fd, int upperbound, char** contbuffer, int* buffersize, in
     }
 
     // The following code maintains the buffer and changes it's size/contents if neccessary
-    size_t populatedbytes = strlen((*contbuffer));                          // number of bytes already read in
-    if (populatedbytes <= upperbound) {                                     // check if enough bytes have been read already
-        if (*buffersize <= upperbound) {                                    // if enough have not been read, make sure there is room in the buffer
+    // size_t populatedbytes = strlen((*contbuffer));                       // number of bytes already read in
+    if (*populatedbytes <= upperbound) {                                    // check if enough bytes have been read already
+        if (*buffersize <= upperbound) {									// if enough have not been read, make sure there is room in the buffer
             char* resized = realloc((*contbuffer), upperbound + 1);         // reallocate buffer to fit <= upperbound + 1 bytes
             if (!resized) {                                                 // check thatn buffer was able to be resized
                 printf("Error: failed to allocate memory, buy some more ram you cheapskate, I only need %d more bytes...\n", upperbound + 1);
                 return NULL;
             } 
             (*contbuffer) = resized;
-            memset(&(*contbuffer)[*buffersize], '0', upperbound-*buffersize);   // null out new bytes
+            memset(&(*contbuffer)[*buffersize], '\0', upperbound-*buffersize);   // null out new bytes
             *buffersize = upperbound + 1;
         }
         int status = 0;
-        while (populatedbytes < upperbound && (status = read(fd, &(*contbuffer)[populatedbytes], upperbound - populatedbytes)) > 0) {
-                populatedbytes += status;                                      // read in max bytes
+        while (*populatedbytes < upperbound && (status = read(fd, &(*contbuffer)[*populatedbytes], upperbound - *populatedbytes)) > 0) {
+                *populatedbytes += status;                                      // read in max bytes
 		}
 		if (status < 0 ) {
 			printf("couldnt read message: %s\n", strerror(errno));
@@ -177,7 +176,8 @@ char* readSection(int fd, int upperbound, char** contbuffer, int* buffersize, in
 
     if (ignoreDelim) {
         memcpy(ret, *contbuffer, upperbound);
-		strshift((*contbuffer), *buffersize, upperbound); 	// skip over used bytes
+		strshift((*contbuffer), *populatedbytes, *buffersize, upperbound); 	// skip over used bytes
+		*populatedbytes -= upperbound;
         return ret;
     }
 
@@ -190,15 +190,16 @@ char* readSection(int fd, int upperbound, char** contbuffer, int* buffersize, in
         }
 		++readindex;
     }
+
 	if (readindex > upperbound + 1) {
         free(ret);
         printf("Error: index out of bounds\n");
 		return NULL;
 	}
 
-    strshift((*contbuffer), *buffersize, readindex + 1);    // readindex is the index of the last character before the delimiter, add 1 to skip delim
-
-    return ret;
+    strshift((*contbuffer), *populatedbytes, *buffersize, readindex + 1);    // readindex is the index of the last character before the delimiter, add 1 to skip delim
+	*populatedbytes -= readindex + 1;
+	return ret;
 
 }
 
@@ -210,37 +211,44 @@ int sendNetworkCommand(NetworkCommand* command, int sockfd) {
 	int i = 0;
 	for (i = 0; i < command->argc; i++) messagelen += command->arglengths[i] + 1 + digitCount(command->arglengths[i]);
 
+	int msgindex = 0;
+
 	// Append the correct request type to the message
 	char* message = malloc(messagelen);
 	if (!message) return -1;
 	memset(message,'\0', messagelen);
 	switch (command->type) 	{
-		case checknet:
-			strcat(message,"check");
-			break;
 		case createnet:
 			strcat(message,"create");
+			msgindex += 6;
 			break;
 		case destroynet:
 			strcat(message,"destroy");
+			msgindex += 7;
 			break;
 		case projectnet:
 			strcat(message,"project");
+			msgindex += 7;
 			break;
 		case rollbacknet:
 			strcat(message,"rollback");
+			msgindex += 8;
 			break;
 		case versionnet:
 			strcat(message,"version");
+			msgindex += 7;
 			break;
 		case filenet:
 			strcat(message,"file");
+			msgindex += 4;
 			break;
 		case responsenet:
 			strcat(message,"response");
+			msgindex += 8;
 			break;
 		case invalidnet:
 			strcat(message,"invalid");
+			msgindex += 7;
 			break;
 		default:
 			free(message);
@@ -250,13 +258,16 @@ int sendNetworkCommand(NetworkCommand* command, int sockfd) {
 	}
 
 	strcat(message,":");
+	msgindex += 1;
 	int l = digitCount(command->argc);
 	char* num = malloc(l + 1);
 	if (!num) return -1;
 	snprintf (num, l+1, "%d",command->argc);
 	strcat(message, num);
+	msgindex += l;
 	free(num);
 	strcat(message,":");
+	msgindex += 1;
 	
 	for (i = 0; i < command->argc; i++) {
 		l = digitCount(command->arglengths[i]);
@@ -264,9 +275,14 @@ int sendNetworkCommand(NetworkCommand* command, int sockfd) {
 		if (!arg) return -1;
 		snprintf (arg, l+1, "%d",command->arglengths[i]);
 		strcat(message, arg);
+		msgindex += l;
 		free(arg);
 		strcat(message, ":");
-		strcat(message,command->argv[i]);
+		msgindex += 1;
+		
+		// strcat(message,command->argv[i]);
+		memcpy(&message[msgindex], command->argv[i], command->arglengths[i]);
+		msgindex += command->arglengths[i];
 	}
 
 	
@@ -279,7 +295,7 @@ int sendNetworkCommand(NetworkCommand* command, int sockfd) {
 
 }
 
-NetworkCommand* newFailureCMND(char* commandName, char* reason) {
+NetworkCommand* newFailureCMND_B(char* commandName, char* reason, int reason_len) {
 	NetworkCommand* command = malloc(sizeof(NetworkCommand));
 	command->type = responsenet;
 	command->argc = 3;
@@ -287,7 +303,7 @@ NetworkCommand* newFailureCMND(char* commandName, char* reason) {
 	command->arglengths = malloc(sizeof(int) * 3);
 	command->arglengths[0] = strlen(commandName);
 	command->arglengths[1] = 7;
-	command->arglengths[2] = strlen(reason);
+	command->arglengths[2] = reason_len;
 	command->argv[0] = commandName;
 	command->argv[1] = malloc(8);
 	memset(command->argv[1],'\0', 8);
@@ -296,10 +312,18 @@ NetworkCommand* newFailureCMND(char* commandName, char* reason) {
 	return command;
 }
 
-NetworkCommand* newSuccessCMND(char* commandName, char* reason) {
-	NetworkCommand* command = newFailureCMND(commandName, reason);
+NetworkCommand* newSuccessCMND_B(char* commandName, char* reason, int reason_len) {
+	NetworkCommand* command = newFailureCMND_B(commandName, reason, reason_len);
 	memcpy(command->argv[1], "success", 8);
 	return command;
+}
+
+NetworkCommand* newFailureCMND(char* commandName, char* reason) {
+	return newFailureCMND_B(commandName, reason, strlen(reason));
+}
+
+NetworkCommand* newSuccessCMND(char* commandName, char* reason) {
+	return newSuccessCMND_B(commandName, reason, strlen(reason));
 }
 
 void freeCMND(NetworkCommand* command) {

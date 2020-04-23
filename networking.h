@@ -30,9 +30,11 @@ int connecttohost(char* remote, int port);
 
 NetworkCommand* readMessage(int sockfd);
 void freeCMND(NetworkCommand* command);
-char* readSection(int fd, int upperbound, char** contbuffer, int* buffersize, int ignoredelim);
+char* readSection(int fd, int upperbound, char** contbuffer, int* buffersize, int* populatedbytes, int ignoredelim);
 int sendNetworkCommand(NetworkCommand* command, int sockfd);
 
+NetworkCommand* newFailureCMND_B(char* commandName, char* reason, int reseon_len);
+NetworkCommand* newSuccessCMND_B(char* commandName, char* reason, int reseon_len);
 NetworkCommand* newFailureCMND(char* commandName, char* reason);
 NetworkCommand* newSuccessCMND(char* commandName, char* reason);
 
