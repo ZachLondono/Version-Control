@@ -30,5 +30,8 @@ int strshift(char* word, size_t buffsize, int offset);
 int incrimentManifest(char* project, FileContents* (*readfile)(char*), ssize_t (*write)(int fd, char* buff, int count));
 int projectVersion(char* project, FileContents* (*readfile)(char*));
 int getManifestVersion(FileContents* manifest);
+char* getcompressedfile(char* filepath, int* deflated_size);
+int recreatefile(char* filepath, char* contents, int size);
+int uncompressfile(char* compressedpath);
 
 #endif

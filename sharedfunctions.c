@@ -164,3 +164,59 @@ int getManifestVersion(FileContents* manifest) {
     return ret;
 
 }
+
+char* getcompressedfile(char* filepath, int* deflated_size) {
+
+	int pathlen = strlen(filepath);
+	int cmndlen = 16 + 7 + pathlen;
+
+	char* tarcmnd = malloc(cmndlen);
+	memset(tarcmnd,'\0', cmndlen);
+	snprintf(tarcmnd, cmndlen, "tar -czvf archive.tar %s", filepath);
+	system(tarcmnd);
+	free(tarcmnd);
+
+	int fd = open("archive.tar", O_RDWR);
+	if (fd < 0) {
+		printf("Error: couldn't read compressed data\n");
+		return NULL;
+	}
+
+    	struct stat filestat;
+    	stat("archive.tar", &filestat);
+    	size_t size = filestat.st_size;
+	*deflated_size = size;
+
+	char* deflated_content = malloc(size);
+	int readin = 0, status = 0;
+	while ((status = read(fd, &deflated_content[readin], size - readin)) > 0) readin += status;
+
+	close(fd);
+
+	if (remove("archive.tar") != 0) printf("Error: couldn't remove temporary files\n");
+
+	return deflated_content;
+	
+}
+
+int recreatefile(char* filepath, char* contents, int size) {
+	int fd = open(filepath, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
+	if (fd < 0) printf("Error: failed to recreate file\n");
+	else write(fd, contents, size);
+	close(fd);
+}
+
+int uncompressfile(char* compressedpath) {
+
+	int pathlen = strlen(compressedpath);
+	int cmndlen = 10 + pathlen;
+
+	char* tarcmnd = malloc(cmndlen);
+	memset(tarcmnd,'\0', cmndlen);
+	snprintf(tarcmnd, cmndlen, "tar -xvf %s", compressedpath);
+	system(tarcmnd);
+	free(tarcmnd);
+
+	if(remove(compressedpath) != 0) printf("Error: couldn't remove temporary files\n");
+
+}
