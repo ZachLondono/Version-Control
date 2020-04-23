@@ -15,7 +15,7 @@
 // contains various functions which aid in sending/recieving messages which abide by the specified network protocol
 
 #define CMND_NAME_MAX 9
-typedef enum messagetype {checknet, createnet, destroynet, projectnet, rollbacknet, versionnet, filenet, responsenet, invalidnet} messagetype;
+typedef enum messagetype {createnet, destroynet, projectnet, rollbacknet, versionnet, filenet, responsenet, invalidnet} messagetype;
 typedef struct NetworkCommand {
     messagetype type;
     int argc;

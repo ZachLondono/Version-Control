@@ -1,6 +1,8 @@
 #include "servercommands.h"
 #include <errno.h>
 
+// This mutex and the following three "server" commands should be used when the server is accessing shared resouces as it 
+// will lock access to the repo for other threads, to eliminate race conditions.
 pthread_mutex_t repo_lock = PTHREAD_MUTEX_INITIALIZER;
 
 int servercheckForLocalProj(char* projectname) {
@@ -48,20 +50,9 @@ int _responsenet(NetworkCommand* command, int sockfd) {
 
 }
 
-int _checknet(NetworkCommand* command, int sockfd) {
-	char* name = malloc(9);
-	memset(name, '\0', 9);
-	memcpy(name, "check", 9);
-	char* reason = malloc(16);
-	memset(reason, '\0', 16);
-	memcpy(reason, "not implimented", 16);
-	NetworkCommand* response = newFailureCMND(name, reason);	
-	sendNetworkCommand(response, sockfd);
-	return 0;
-}
-
+// creates a new project directory if it does not already exist, and initilizes a new .Manifest
 int _createnet(NetworkCommand* command, int sockfd) {
-		// version  arg0- project name
+	// version  arg0- project name
 	char* name = malloc(9);
 	memset(name, '\0', 9);
 	memcpy(name, "create", 9);
@@ -69,6 +60,7 @@ int _createnet(NetworkCommand* command, int sockfd) {
 	if (command->argc != 1) {
 		printf("Error: Malformed message from client\n");
 		char* reason = malloc(18);
+		memset(reason, '\0', 18);
 		memcpy(reason, "Malformed message", 18);	
 		NetworkCommand* response = newFailureCMND(name, reason);	
 		sendNetworkCommand(response, sockfd);
@@ -79,6 +71,7 @@ int _createnet(NetworkCommand* command, int sockfd) {
 	if (servercheckForLocalProj(command->argv[0])) {
 		printf("Error: Request for invalid project from client\n");
 		char* reason = malloc(22);
+		memset(reason, '\0', 22);
 		memcpy(reason, "Project already exist", 22);	
 		NetworkCommand* response = newFailureCMND(name, reason);	
 		sendNetworkCommand(response, sockfd);
@@ -115,6 +108,7 @@ int _createnet(NetworkCommand* command, int sockfd) {
 }
 
 int _destroynet(NetworkCommand* command, int sockfd) {
+	// arg[0] = project name
 	char* name = malloc(9);
 	memcpy(name, "destroy", 9);
 	char* reason = malloc(16);
@@ -125,6 +119,7 @@ int _destroynet(NetworkCommand* command, int sockfd) {
 }
 
 int _projectnet(NetworkCommand* command, int sockfd) {
+	// arg[0] = project name
 	char* name = malloc(9);
 	memcpy(name, "project", 9);
 	char* reason = malloc(16);
@@ -135,6 +130,7 @@ int _projectnet(NetworkCommand* command, int sockfd) {
 }
 
 int _rollbacknet(NetworkCommand* command, int sockfd) {
+	// arg[0] = project name, arg[1] = old version
 	char* name = malloc(9);
 	memcpy(name, "rollback", 9);
 	char* reason = malloc(16);
@@ -144,6 +140,7 @@ int _rollbacknet(NetworkCommand* command, int sockfd) {
 	return 0;
 }
 
+// checks that a project exists and returns its .Manifest version
 int _versionnet(NetworkCommand* command, int sockfd) {
 	// version  arg0- project name
 	char* name = malloc(9);
@@ -153,6 +150,7 @@ int _versionnet(NetworkCommand* command, int sockfd) {
 	if (command->argc != 1) {
 		printf("Error: Malformed message from client\n");
 		char* reason = malloc(18);
+		memset(reason, '\0', 18);
 		memcpy(reason, "Malformed message", 18);	
 		NetworkCommand* response = newFailureCMND(name, reason);	
 		sendNetworkCommand(response, sockfd);
@@ -163,6 +161,7 @@ int _versionnet(NetworkCommand* command, int sockfd) {
 	if (!servercheckForLocalProj(command->argv[0])) {
 		printf("Error: Request for invalid project from client\n");
 		char* reason = malloc(24);
+		memset(reason, '\0', 24);
 		memcpy(reason, "Project does not exist", 24);	
 		NetworkCommand* response = newFailureCMND(name, reason);	
 		sendNetworkCommand(response, sockfd);
@@ -182,6 +181,7 @@ int _versionnet(NetworkCommand* command, int sockfd) {
 }
 
 int _filenet(NetworkCommand* command, int sockfd) {
+	// arg[0] = filename
 	char* name = malloc(9);
 	memcpy(name, "file", 9);
 	char* reason = malloc(16);
@@ -196,9 +196,6 @@ int executecommand(NetworkCommand* command, int sockfd) {
 	switch (command->type){
 		case responsenet:
 			return _responsenet(command, sockfd);
-			break;
-		case checknet:
-			return _checknet(command, sockfd);
 			break;
 		case createnet:
 			return _createnet(command, sockfd);
