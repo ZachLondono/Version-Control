@@ -26,6 +26,7 @@ char* hashtohex(unsigned char* hash);
 unsigned char* hashdata(unsigned char* data, size_t datalen);
 FileContents* readfile(char* name);
 void freefile(FileContents* file);
+char* strrmove(char* str, const char* sub);
 int isNum(char* value, int len);
 int digitCount(int num);
 int strshift(char* word, int populatedbytes, size_t buffsize, int offset);

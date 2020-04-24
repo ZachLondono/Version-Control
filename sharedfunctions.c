@@ -184,7 +184,7 @@ char* getcompressedfile(char* filepath, int* deflated_size) {
 	system(tarcmnd);
 	free(tarcmnd);
 
-	int fd = open("archive.tar", O_RDWR);
+	int fd = open("archive.tar.gz", O_RDWR);
 	if (fd < 0) {
 		printf("Error: couldn't read compressed data\n");
 		return NULL;
@@ -210,7 +210,7 @@ char* getcompressedfile(char* filepath, int* deflated_size) {
 int recreatefile(char* filepath, char* contents, int size) {
 	int fd = open(filepath, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
 	if (fd < 0) printf("Error: failed to recreate file\n");
-	else write(fd, contents, size);
+	else write(fd, contents, size);                             //TODO MAKE SURE ALL DATA WAS WRITTEN
 	close(fd);
     return fd >= 0 ? 0 : -1;
 }
@@ -231,4 +231,16 @@ int uncompressfile(char* compressedpath) {
     }
     return ret;
 
+}
+
+char* strrmove(char* str, const char* sub) {
+    char *p, *q, *r;
+    if ((q = r = strstr(str, sub)) != NULL) {
+        size_t len = strlen(sub);
+        while ((r = strstr(p = r + len, sub)) != NULL) {
+            while (p < r) *q++ = *p++;
+        }
+        while((*q++ = *p++) != '\0') continue;
+    }
+    return str;
 }
