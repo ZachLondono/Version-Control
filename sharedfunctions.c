@@ -9,8 +9,8 @@ int checkForLocalProj(char* projname) {
 }
 
 char* hashtohex(unsigned char* hash) {
-    char* hex = malloc(SHA_DIGEST_LENGTH*2);
-    memset(hex, '\0', SHA_DIGEST_LENGTH*2);
+    char* hex = malloc(SHA_DIGEST_LENGTH*2 + 1);
+    memset(hex, '\0', SHA_DIGEST_LENGTH*2 + 1);
     char* sub = malloc(4);
     memset(sub, '\0', 4);
     int i = 0;
