@@ -1,3 +1,4 @@
+#include <errno.h>
 #include "clientcommands.h"
 
 //invalid=0, configure=1, checkout=2, update=3, upgrade=4, commit=5, push=6, create=7, destroy=8, add=9, remove_cmnd=10, currentversion=11, history=12, rollback=13
@@ -151,6 +152,24 @@ int _create(ClientCommand* command) {
     printf("Project '%s' has been created in the repository\n", command->args[0]);
 
     freeCMND(response);
+
+    if (mkdir(command->args[0], 0700)) {
+		printf("Error: failed to create new project directory: %s\n", strerror(errno));
+	}
+    char* newmanifest = malloc( + 11);
+	memset(newmanifest, '\0', strlen(command->args[0]) + 11);
+	strcat(newmanifest, command->args[0]);
+	strcat(newmanifest, "/.Manifest");
+	int fd = open(newmanifest, O_WRONLY | O_CREAT, S_IRWXU);
+	if (fd < 0) {
+		printf("Error: failed to create new manifest is project: %s\n", strerror(errno));
+	} else { 
+		write(fd, "1\n", 2);
+		close(fd);
+		free(newmanifest);
+	}
+
+    printf("Project '%s' has been created locally\n", command->args[0]);
     
     return 0;
 
@@ -162,8 +181,96 @@ int _destroy(ClientCommand* command) {
 }
 
 int _add(ClientCommand* command) {
-    printf("add not implimented\n");
-    return -1;
+
+    char* proj = command->args[0];
+    char* file = command->args[1];
+
+    if(!checkForLocalProj(command->args[0])) {
+        printf("Error: project does not exist locally, checkout the project or create it if it does not exist\n");
+        return -1;
+    }
+
+    int projlen = strlen(command->args[0]);
+    int filelen = strlen(command->args[1]);
+    char* fullpath = malloc(projlen + 2 + filelen);
+    memset(fullpath, '\0', projlen + filelen + 2);
+    sprintf(fullpath, "%s/%s", proj, file);
+
+    FileContents* filecontents = readfile(fullpath);
+    if (filecontents == NULL) {
+        printf("Error: file does not exist or cannot be accessed\n");
+        free(fullpath);
+        return -1;
+    }
+
+    char* manifestpath = malloc(projlen + 11);
+    memset(manifestpath, '\0', projlen + 11);
+    snprintf(manifestpath, projlen + 11, "%s/.Manifest", proj);
+    FileContents* manifest = readfile(manifestpath);
+    if (manifest == NULL) {
+        printf("Error: project has not been initalized or cannot be accessed\n");
+        free(fullpath);
+        free(manifestpath);
+        freefile(manifest);
+        freefile(filecontents);
+        return -1;
+    }
+
+    if(strstr(manifest->content, fullpath) != NULL) {
+        printf("Error: file has already been added\n");
+        free(fullpath);
+        free(manifestpath);
+        freefile(manifest);
+        freefile(filecontents);
+        return -1;    
+    }
+
+    int len =  manifest->size + filelen + projlen + SHA_DIGEST_LENGTH*2 + 6;
+    char* newmanifest = malloc(len);
+    memset(newmanifest, '\0', len);
+
+    unsigned char* filehash = hashdata((unsigned char*) filecontents->content, filecontents->size);
+    char* encodedhash = hashtohex(filehash);
+    free(filehash);
+
+    snprintf(newmanifest, len, "%s1 %s %s\n", manifest->content, fullpath, encodedhash);
+    free(fullpath);
+    free(encodedhash);
+    freefile(filecontents);
+    freefile(manifest);
+
+    char* tempmanifest = malloc(projlen + 16);
+    memset(tempmanifest, '\0', projlen + 16);
+    snprintf(tempmanifest, projlen + 16, "%s.temp", manifestpath);
+    int fd = open(tempmanifest, O_RDWR | O_CREAT, S_IRWXU);
+    if (fd < 0) {
+        printf("Error: failed to add file\n");
+        free(newmanifest);
+        close(fd);
+        return -1;
+    }
+
+    int status = 0;
+    int written = 0;
+    while((status = write(fd, &newmanifest[written], len - 1 - written)) > 0) written += status;
+    
+    free(newmanifest);
+    close(fd);
+    
+    if (status == -1) {
+        printf("Error: failed to add file\n");
+        return -1;
+    } 
+
+    remove(manifestpath);
+    rename(tempmanifest, manifestpath);
+    free(tempmanifest);
+    free(manifestpath);
+
+    printf("File '%s' has been added\n", file);
+
+    return 0;
+    
 }
 
 int _remove(ClientCommand* command) {
@@ -295,9 +402,6 @@ void freeConfig(Configuration* config) {
     if (config->host != NULL) free(config->host);
     free(config);
 }
-
-
-
 
 
 
