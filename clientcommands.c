@@ -353,9 +353,8 @@ int _remove(ClientCommand* command) {
     int status = 0;         
     int written = 0;
     while((status = write(fd, &newcontent[written], manifest->size - tokenlen - 1 - written)) > 0) written += status;
+    freefile(manifest);
     
-    free(newcontent);
-    close(fd);
     
     if (status == -1) {
         printf("Error: failed to remove file\n");
@@ -364,8 +363,13 @@ int _remove(ClientCommand* command) {
 
     remove(manifestpath);                                   // relace loacl .Manifest with new one
     rename(tempmanifest, manifestpath);
+    
+    close(fd);
     free(tempmanifest);
+    free(fullpath);
     free(manifestpath);
+    free(manifestcontent);
+    free(fulltoken);
 
     printf("File '%s' has been removed\n", file);
 
