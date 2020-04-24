@@ -12,6 +12,43 @@ int servercheckForLocalProj(char* projectname) {
 	return ret;
 }
 
+int checkcommand(NetworkCommand* command, int expectedargs, char* name, int sockfd, int requireproj) {
+	
+	if (command->argc != expectedargs) {
+		printf("Error: Malformed message from client\n");
+		char* reason = malloc(18);
+		memset(reason, '\0', 18);
+		memcpy(reason, "Malformed message", 18);	
+		NetworkCommand* response = newFailureCMND(name, reason);	
+		sendNetworkCommand(response, sockfd);
+		freeCMND(response);
+		return 0;
+	}
+
+	if (servercheckForLocalProj(command->argv[0]) != requireproj) {
+		printf("Error: Request for invalid project from client\n");
+		char* reason;
+		
+		if (!requireproj) {
+			reason = malloc(22);
+			memset(reason, '\0', 22);
+			memcpy(reason, "Project already exist", 22);
+		} else {
+			reason = malloc(24);
+			memset(reason, '\0', 24);
+			memcpy(reason, "Project does not exist", 24);	
+		}
+
+		NetworkCommand* response = newFailureCMND(name, reason);	
+		sendNetworkCommand(response, sockfd);
+		freeCMND(response);
+		return 0;
+	}
+
+	return 1;
+
+}
+
 FileContents* serverreadfile(char* name) {
 	pthread_mutex_lock(&repo_lock);
 	FileContents* content = readfile(name);
@@ -50,6 +87,7 @@ int _responsenet(NetworkCommand* command, int sockfd) {
 
 }
 
+
 // creates a new project directory if it does not already exist, and initilizes a new .Manifest
 int _createnet(NetworkCommand* command, int sockfd) {
 	// version  arg0- project name
@@ -57,27 +95,7 @@ int _createnet(NetworkCommand* command, int sockfd) {
 	memset(name, '\0', 9);
 	memcpy(name, "create", 9);
 
-	if (command->argc != 1) {
-		printf("Error: Malformed message from client\n");
-		char* reason = malloc(18);
-		memset(reason, '\0', 18);
-		memcpy(reason, "Malformed message", 18);	
-		NetworkCommand* response = newFailureCMND(name, reason);	
-		sendNetworkCommand(response, sockfd);
-		freeCMND(response);
-		return -1;
-	}
-
-	if (servercheckForLocalProj(command->argv[0])) {
-		printf("Error: Request for invalid project from client\n");
-		char* reason = malloc(22);
-		memset(reason, '\0', 22);
-		memcpy(reason, "Project already exist", 22);	
-		NetworkCommand* response = newFailureCMND(name, reason);	
-		sendNetworkCommand(response, sockfd);
-		freeCMND(response);
-		return -1;
-	}
+	if (!checkcommand(command, 1, name, sockfd, 0)) return -1;
 
 	if (mkdir(command->argv[0], 0700)) {
 		printf("Error: failed to create new project directory: %s\n", strerror(errno));
@@ -147,27 +165,7 @@ int _versionnet(NetworkCommand* command, int sockfd) {
 	memset(name, '\0', 9);
 	memcpy(name, "version", 9);
 
-	if (command->argc != 1) {
-		printf("Error: Malformed message from client\n");
-		char* reason = malloc(18);
-		memset(reason, '\0', 18);
-		memcpy(reason, "Malformed message", 18);	
-		NetworkCommand* response = newFailureCMND(name, reason);	
-		sendNetworkCommand(response, sockfd);
-		freeCMND(response);
-		return -1;
-	}
-
-	if (!servercheckForLocalProj(command->argv[0])) {
-		printf("Error: Request for invalid project from client\n");
-		char* reason = malloc(24);
-		memset(reason, '\0', 24);
-		memcpy(reason, "Project does not exist", 24);	
-		NetworkCommand* response = newFailureCMND(name, reason);	
-		sendNetworkCommand(response, sockfd);
-		freeCMND(response);
-		return -1;
-	}
+	if (!checkcommand(command, 1, name,sockfd,1)) return -1;
 	
 	int version = projectVersion(command->argv[0], &serverreadfile);
 	char* reason = malloc(digitCount(version) + 1);
