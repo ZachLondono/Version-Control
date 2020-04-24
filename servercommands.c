@@ -87,7 +87,6 @@ int _responsenet(NetworkCommand* command, int sockfd) {
 
 }
 
-
 // creates a new project directory if it does not already exist, and initilizes a new .Manifest
 int _createnet(NetworkCommand* command, int sockfd) {
 	// version  arg0- project name
@@ -138,12 +137,17 @@ int _destroynet(NetworkCommand* command, int sockfd) {
 
 int _projectnet(NetworkCommand* command, int sockfd) {
 	// arg[0] = project name
+	
 	char* name = malloc(9);
 	memcpy(name, "project", 9);
-	char* reason = malloc(16);
-	memcpy(reason, "not implimented", 16);
-	NetworkCommand* response = newFailureCMND(name, reason);	
+
+	int deflatedsize = 0;
+	char* compressed = getcompressedfile(command->argv[0], &deflatedsize);
+
+	NetworkCommand* response = newSuccessCMND_B(name,compressed, deflatedsize);	
+
 	sendNetworkCommand(response, sockfd);
+	freeCMND(response);
 	return 0;
 }
 
