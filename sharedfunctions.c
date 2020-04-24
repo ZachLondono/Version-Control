@@ -8,12 +8,19 @@ int checkForLocalProj(char* projname) {
 	return 1;
 }
 
-void hashtohexprint(unsigned char* hash) {
+char* hashtohex(unsigned char* hash) {
+    char* hex = malloc(SHA_DIGEST_LENGTH*2);
+    memset(hex, '\0', SHA_DIGEST_LENGTH*2);
+    char* sub = malloc(4);
+    memset(sub, '\0', 4);
     int i = 0;
     for (i = 0; i < SHA_DIGEST_LENGTH; i++) {
-        printf(" %2x", (unsigned char) hash[i]);
+        memset(sub, '\0', 4);
+        sprintf(sub, "%02x", (unsigned char) hash[i]);
+        strcat(hex, sub);
     }
-    printf("\n");
+    free(sub);
+    return hex;
 }
 
 unsigned char* hashdata(unsigned char* data, size_t datalen) {

@@ -22,6 +22,7 @@ typedef struct FileContents{
 int checkForLocalProj(char* projname);
 char* bin2hex(const unsigned char *bin, size_t len);
 int hexchr2bin(const char hex, char* out);
+char* hashtohex(unsigned char* hash);
 unsigned char* hashdata(unsigned char* data, size_t datalen);
 FileContents* readfile(char* name);
 void freefile(FileContents* file);
