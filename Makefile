@@ -8,7 +8,7 @@ client: client.c clientcommands.c networking.c sharedfunctions.c
 server: server.c servercommands.c networking.c sharedfunctions.c
 	gcc -g -Wall server.c servercommands.c networking.c sharedfunctions.c queue.c -pthread -lssl -lcrypto -o server
 
-clean: server client
+clean: 
 	rm server
 	rm client
 
