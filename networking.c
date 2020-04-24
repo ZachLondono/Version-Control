@@ -79,7 +79,8 @@ NetworkCommand* readMessage(int sockfd) {
 	int i = 0;
 	for(i = 0; i < argc; i++) {
 		
-		char* size_s = readSection(sockfd, 4, &contbuffer, &buffersize, &populatedbytes, 0);	// read in the length of the argument in bytes
+		// TODO if the upper bound is longer than bytes remaining in the message, read will block until enough bytes recievd
+		char* size_s = readSection(sockfd, 20, &contbuffer, &buffersize, &populatedbytes, 0);	// read in the length of the argument in bytes
 		if (!size_s) {	// if size_s is null, the value is more digits than the upperbounds
 			char* reason = malloc(29);		
 			memset(reason, '\0', 29);
@@ -145,7 +146,7 @@ char* readSection(int fd, int upperbound, char** contbuffer, int* buffersize, in
 
     // The following code maintains the buffer and changes it's size/contents if neccessary
     // size_t populatedbytes = strlen((*contbuffer));                       // number of bytes already read in
-    if (*populatedbytes <= upperbound) {                                    // check if enough bytes have been read already
+    if ((ignoreDelim || strstr(*contbuffer, ":") == NULL) && *populatedbytes <= upperbound) {                                    // check if enough bytes have been read already
         if (*buffersize <= upperbound) {									// if enough have not been read, make sure there is room in the buffer
             char* resized = realloc((*contbuffer), upperbound + 1);         // reallocate buffer to fit <= upperbound + 1 bytes
             if (!resized) {                                                 // check thatn buffer was able to be resized
@@ -156,9 +157,12 @@ char* readSection(int fd, int upperbound, char** contbuffer, int* buffersize, in
             memset(&(*contbuffer)[*buffersize], '\0', upperbound-*buffersize);   // null out new bytes
             *buffersize = upperbound + 1;
         }
+		int amount = ignoreDelim ? upperbound - *populatedbytes : 1;			 // if we don't want to ignore delimiters, we will read in 1 byte at a time, so we do not end up blocking by trying to overread 
         int status = 0;
-        while (*populatedbytes < upperbound && (status = read(fd, &(*contbuffer)[*populatedbytes], upperbound - *populatedbytes)) > 0) {
-                *populatedbytes += status;                                      // read in max bytes
+        while ((status = read(fd, &(*contbuffer)[*populatedbytes], amount)) > 0) {
+                *populatedbytes += status;
+				amount = ignoreDelim ? upperbound - *populatedbytes : 1;
+				if (*populatedbytes >= upperbound || (!ignoreDelim && (*contbuffer)[*populatedbytes - 1] == ':')) break;	// if we are waiting for a delim, and we found one, stop reading
 		}
 		if (status < 0 ) {
 			printf("couldnt read message: %s\n", strerror(errno));
