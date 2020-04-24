@@ -105,7 +105,29 @@ int _configure(ClientCommand* command) {
 }
 
 int _checkout(ClientCommand* command) {
-    printf("checkout not implimented\n");
+
+    NetworkCommand* request = newrequest(command, 1);
+    request->type = projectnet;
+
+    int sockfd = connectwithconfig();
+    if (sockfd < 0) {
+        freeCMND(request);
+        return sockfd;
+    }
+
+    sendNetworkCommand(request, sockfd);
+    freeCMND(request);
+
+    NetworkCommand* response = readMessage(sockfd);
+    close(sockfd);
+
+    if (checkresponse("project", response) < 0) return -1;     // check the response if valid
+
+    recreatefile("archive.tar.gz", response->argv[2], response->arglengths[2]);
+    uncompressfile("archive.tar.gz");    
+
+    // printf("%d compressed bytes recieved\nProject '%s' has been checked out\n", response->arglengths[2], response->argv[2]);
+    // freeCMND(response);
     return -1;
 }
 
@@ -271,18 +293,6 @@ int _add(ClientCommand* command) {
 
     return 0;
     
-}
-
-char* strrmove(char* str, const char* sub) {
-    char *p, *q, *r;
-    if ((q = r = strstr(str, sub)) != NULL) {
-        size_t len = strlen(sub);
-        while ((r = strstr(p = r + len, sub)) != NULL) {
-            while (p < r) *q++ = *p++;
-        }
-        while((*q++ = *p++) != '\0') continue;
-    }
-    return str;
 }
 
 int _remove(ClientCommand* command) {
