@@ -154,23 +154,6 @@ int _destroynet(NetworkCommand* command, int sockfd) {
 	return 0;
 }
 
-int _projectnet(NetworkCommand* command, int sockfd) {
-	// arg[0] = project name
-	char* name = malloc(9);
-	memcpy(name, "project", 9);
-
-	if (!checkcommand(command, 1, name,sockfd,1)) return -1;
-
-	int deflatedsize = 0;
-	char* compressed = getcompressedfile(command->argv[0], &deflatedsize);
-
-	NetworkCommand* response = newSuccessCMND_B(name,compressed, deflatedsize);	
-
-	sendNetworkCommand(response, sockfd);
-	freeCMND(response);
-	return 0;
-}
-
 int _rollbacknet(NetworkCommand* command, int sockfd) {
 	// arg[0] = project name, arg[1] = old version
 	char* name = malloc(9);
@@ -211,27 +194,7 @@ int _filenet(NetworkCommand* command, int sockfd) {
 	memset(name, '\0', 5);
 	memcpy(name, "file", 5);
 
-	if (command->argc != 2) {
-		printf("Error: Malformed message from client\n");
-		char* reason = malloc(18);
-		memset(reason, '\0', 18);
-		memcpy(reason, "Malformed message", 18);	
-		NetworkCommand* response = newFailureCMND(name, reason);	
-		sendNetworkCommand(response, sockfd);
-		freeCMND(response);
-		return -1;
-	}
-
-	if (!servercheckForLocalProj(command->argv[0])) {
-		printf("Error: Request for invalid project from client\n");
-		char* reason = malloc(24);
-		memset(reason, '\0', 24);
-		memcpy(reason, "Project does not exist", 24);	
-		NetworkCommand* response = newFailureCMND(name, reason);	
-		sendNetworkCommand(response, sockfd);
-		freeCMND(response);
-		return -1;
-	}
+	if (!checkcommand(command, 2, name, sockfd,1)) return -1;
 
 	int filepath_size = command->arglengths[0] + command->arglengths[1] + 2;
 	char* filepath = malloc(filepath_size);

@@ -106,8 +106,8 @@ int _configure(ClientCommand* command) {
 
 int _checkout(ClientCommand* command) {
 
-    NetworkCommand* request = newrequest(command, 1);
-    request->type = projectnet;
+    NetworkCommand* request = newrequest(command, 2);
+    request->type = filenet;
 
     int sockfd = connectwithconfig();
     if (sockfd < 0) {
@@ -126,8 +126,8 @@ int _checkout(ClientCommand* command) {
     recreatefile("archive.tar.gz", response->argv[2], response->arglengths[2]);
     uncompressfile("archive.tar.gz");    
 
-    // printf("%d compressed bytes recieved\nProject '%s' has been checked out\n", response->arglengths[2], response->argv[2]);
-    // freeCMND(response);
+    printf("%d compressed bytes recieved\nProject '%s' has been checked out\n", response->arglengths[2], command->args[0]);
+    freeCMND(response);
     return -1;
 }
 

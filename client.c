@@ -52,6 +52,7 @@ int main(int argc, char** argv) {
         command->type = remove_cmnd;
         cmnd_func = &_remove;
     } else if (strcmp(command_text, "rollback") == 0) {   
+        arg_count = 2;
         command->type = rollback;
         cmnd_func = &_rollback;
     } else if (strcmp(command_text, "update") == 0) {
@@ -83,8 +84,9 @@ int main(int argc, char** argv) {
     }
 
     // retrieve arguments, save them in the command struct
-    command->args = malloc(sizeof(char*) * arg_count);
+    command->args = command->type == checkout ? malloc(sizeof(char*) * 2) : malloc(sizeof(char*) * arg_count);
     command->args[0] = argv[2];
+    if (command->type == checkout) command->args[1] = ".";
     if (arg_count == 2) command->args[1] = argv[3];
 
     //execute associated function
