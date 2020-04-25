@@ -181,7 +181,7 @@ char* getcompressedfile(char* filepath, int* deflated_size) {
 	char* tarcmnd = malloc(cmndlen);
 	memset(tarcmnd,'\0', cmndlen);
 	snprintf(tarcmnd, cmndlen, "tar -czf archive.tar.gz %s", filepath);
-	system(tarcmnd);
+	if (system(tarcmnd) != 0) return NULL;
 	free(tarcmnd);
 
 	int fd = open("archive.tar.gz", O_RDWR);
