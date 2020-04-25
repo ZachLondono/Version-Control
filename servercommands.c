@@ -56,9 +56,23 @@ FileContents* serverreadfile(char* name) {
 	return content;
 }
 
-ssize_t serverwrite(int fd, char* buff, int count) {
+ssize_t serverwrite(int fd, char* buff, size_t count) {
 	pthread_mutex_lock(&repo_lock);
 	ssize_t ret = write(fd, buff, count);
+	pthread_mutex_unlock(&repo_lock);
+	return ret;
+}
+
+ssize_t serverread(int fd, char* buff, size_t count) {
+	pthread_mutex_lock(&repo_lock);
+	ssize_t ret = read(fd, buff, count);
+	pthread_mutex_unlock(&repo_lock);
+	return ret;
+}
+
+int serveropen(const char* pathname, int flags) {
+	pthread_mutex_lock(&repo_lock);
+	int ret = open(pathname, flags);
 	pthread_mutex_unlock(&repo_lock);
 	return ret;
 }
@@ -189,20 +203,93 @@ int _versionnet(NetworkCommand* command, int sockfd) {
 }
 
 int _filenet(NetworkCommand* command, int sockfd) {
-	// version  arg0- project name 		arg1- file name
+	// version  arg0- project name 		arg1- filecount   arg2- file1 name  arg3- file2 name ...
 	char* name = malloc(5);
 	memset(name, '\0', 5);
 	memcpy(name, "file", 5);
 
-	if (!checkcommand(command, 2, name, sockfd,1)) return -1;
+	int filecount = atoi(command->argv[1]);
 
-	int filepath_size = command->arglengths[0] + command->arglengths[1] + 2;
-	char* filepath = malloc(filepath_size);
-	snprintf(filepath, filepath_size, "%s/%s", command->argv[0], command->argv[1]);
+	if (!checkcommand(command, filecount + 2, name, sockfd,1)) return -1;
 
+	int totallen = 1;
+	char** fullpaths = malloc(filecount * sizeof(char*));	// full paths of all files 
+	int i = 0;
+	for (i = 0; i < filecount; i++) {
+		
+		int pathlen = command->arglengths[0] + command->arglengths[i+2] + 2;
+		fullpaths[i] = malloc(pathlen);
+		memset(fullpaths[i], '\0', pathlen);
+		sprintf(fullpaths[i], "%s/%s", command->argv[0], command->argv[i+2]);
+		
+		totallen += pathlen + 1;
+
+		int fd = serveropen(fullpaths[i], O_RDONLY);
+		
+		// Check that all files exist, if not cancel request
+		if (fd < 0) {
+			
+			printf("Error: client requested file which doesn't exist or cant be opened\n");
+			char* reason = malloc(56);
+			memset(reason, '\0', 56);
+			memcpy(reason, "Some files requested do not exist or cannot be accessed", 56);
+			
+			NetworkCommand* response = newFailureCMND_B(name, reason, 56);
+			sendNetworkCommand(response, sockfd);
+			free(response);
+			int j = 0;
+			for (j = 0; j <= i; j++) {
+				free(fullpaths[j]);
+			}
+			free(fullpaths);
+
+			return -1;
+
+		}
+
+		close(fd);
+
+	}
+
+	char* allpaths = malloc(totallen);
+	memset(allpaths, '\0', totallen);
+	for (i = 0; i < filecount; i++) {
+		if (i != 0) strcat(allpaths, fullpaths[i]);
+		strcat(allpaths, fullpaths[i]);
+	}
+
+	char* filecontents = NULL;
 	int filesize = 0;
-	char* filecontents = getcompressedfile(filepath, &filesize);
-	free(filepath);
+	if ((filecontents = getcompressedfile(allpaths, &filesize, serveropen, serverread)) == NULL) {
+		printf("Error: failed to compress files\n");
+		char* reason = malloc(23);
+		memset(reason, '\0', 23);
+		memcpy(reason, "Couldn't archive files", 23);
+		
+		NetworkCommand* response = newFailureCMND_B(name, reason, 23);
+		sendNetworkCommand(response, sockfd);
+		free(response);
+		for (i = 0; i <= filecount; i++) {
+			free(fullpaths[i]);
+		}
+		free(fullpaths);
+		free(allpaths);
+		return -1;
+	}
+
+	for (i = 0; i < filecount; i++) {
+		free(fullpaths[i]);
+	}
+	free(fullpaths);
+	free(allpaths);
+
+	// int filepath_size = command->arglengths[0] + command->arglengths[1] + 2;
+	// char* filepath = malloc(filepath_size);
+	// snprintf(filepath, filepath_size, "%s/%s", command->argv[0], command->argv[1]);
+
+	// int filesize = 0;
+	// char* filecontents = getcompressedfile(filepath, &filesize);
+	// free(filepath);
 
 	NetworkCommand* response = newSuccessCMND_B(name, filecontents, filesize);
 
@@ -224,9 +311,6 @@ int executecommand(NetworkCommand* command, int sockfd) {
 			break;
 		case destroynet:
 			return _destroynet(command, sockfd);
-			break;
-		case projectnet:
-			return _projectnet(command, sockfd);
 			break;
 		case rollbacknet:
 			return _rollbacknet(command, sockfd);

@@ -5,7 +5,9 @@
 
 int servercheckForLocalProj(char* projectname);
 FileContents* serverreadfile(char* name);
-ssize_t serverwrite(int fd, char* buff, int count);
+ssize_t serverwrite(int fd, char* buff, size_t count);
+ssize_t serverread(int fd, char* buff, size_t count);
+int serveropen(const char* pathname, int flags);
 
 int _responsenet(NetworkCommand* command, int sockfd);
 int _createnet(NetworkCommand* command, int sockfd);
