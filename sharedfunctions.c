@@ -174,10 +174,10 @@ int getManifestVersion(FileContents* manifest) {
 }
 
 int createcompressedarchive(char* filepath, int pathlen) {
-	int cmndlen = 26 + pathlen + 1;
+	int cmndlen = 26 + pathlen;
     char* tarcmnd = malloc(cmndlen);
 	memset(tarcmnd,'\0', cmndlen);
-	snprintf(tarcmnd, cmndlen, "tar -czvf archive.tar.gz %s", filepath);
+	snprintf(tarcmnd, cmndlen, "tar -czf archive.tar.gz %s", filepath);
 	if (system(tarcmnd) != 0) {
         printf("tar command failed\n");
         return -1;
