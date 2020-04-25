@@ -84,9 +84,10 @@ int main(int argc, char** argv) {
     }
 
     // retrieve arguments, save them in the command struct
-    command->args = command->type == checkout ? malloc(sizeof(char*) * 2) : malloc(sizeof(char*) * arg_count);
+    // command->args = command->type == checkout ? malloc(sizeof(char*) * 2) : malloc(sizeof(char*) * arg_count);
+    command->args = malloc(sizeof(char*) * arg_count);
     command->args[0] = argv[2];
-    if (command->type == checkout) command->args[1] = ".";
+    // if (command->type == checkout) command->args[1] = ".";
     if (arg_count == 2) command->args[1] = argv[3];
 
     //execute associated function

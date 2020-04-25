@@ -32,6 +32,35 @@ NetworkCommand* newrequest(ClientCommand* command, int argc) {
 
 }
 
+NetworkCommand* newfilerequest(char* project, char** filepaths, int filecount) {
+
+    NetworkCommand* request = malloc(sizeof(NetworkCommand));
+    request->argc = 2 + filecount;
+    request->arglengths = malloc(sizeof(int) * request->argc);
+    request->argv = malloc(sizeof(char*) * request->argc);
+
+    request->arglengths[0] = strlen(project);
+    request->argv[0] = malloc(request->arglengths[0] + 1);
+    memset(request->argv[0], '\0', request->arglengths[0]);
+    memcpy(request->argv[0], project, request->arglengths[0]);
+
+    int arg1len = digitCount(filecount) + 1;
+    request->argv[1] = malloc(arg1len);
+    sprintf(request->argv[1], "%d", filecount);
+    request->arglengths[1] = arg1len - 1;
+
+    int i = 0;
+    for (i = 0; i < filecount; i++) {
+        request->arglengths[i + 2] = strlen(filepaths[i]);
+        request->argv[i+2] = malloc(request->arglengths[i+2] + 1);
+        memset(request->argv[i + 2], '\0', request->arglengths[i+2] + 1);
+        memcpy(request->argv[i + 2], filepaths[i], request->arglengths[i+2]);
+    }
+
+    return request;
+
+}
+
 int checkresponse(char* command, NetworkCommand* response) {
     
     if (response->argc != 3 || strcmp(response->argv[0], command) != 0) { 	// valid responses to the create request will contain 3 arguments
@@ -106,7 +135,9 @@ int _configure(ClientCommand* command) {
 
 int _checkout(ClientCommand* command) {
 
-    NetworkCommand* request = newrequest(command, 2);
+    char** files = malloc(sizeof(char*));
+    files[0] = ".";
+    NetworkCommand* request = newfilerequest(command->args[0], files, 1);
     request->type = filenet;
 
     int sockfd = connectwithconfig();
@@ -121,7 +152,7 @@ int _checkout(ClientCommand* command) {
     NetworkCommand* response = readMessage(sockfd);
     close(sockfd);
 
-    if (checkresponse("project", response) < 0) return -1;     // check the response if valid
+    if (checkresponse("file", response) < 0) return -1;     // check the response if valid
 
     recreatefile("archive.tar.gz", response->argv[2], response->arglengths[2]);
     uncompressfile("archive.tar.gz");    
@@ -438,7 +469,7 @@ int _history(ClientCommand* command) {
     return -1;
 }
 
-int _rollback(ClientCommand* command) {    
+int _rollback(ClientCommand* command) {
     printf("rollback not implimented\n");
     return -1;
 }
