@@ -198,8 +198,29 @@ int _create(ClientCommand* command) {
 }
 
 int _destroy(ClientCommand* command) {
-    printf("destroy not implimented\n");
-    return -1;
+    NetworkCommand* request = newrequest(command, 1);
+    request->type = destroynet;
+
+    int sockfd = connectwithconfig();
+    if (sockfd < 0) {
+        freeCMND(request);
+        return sockfd;
+    }
+
+    sendNetworkCommand(request, sockfd);
+    freeCMND(request);
+
+    NetworkCommand* response = readMessage(sockfd);
+    close(sockfd);
+    
+    if (checkresponse("destroy", response) < 0) return -1;     // check the response if valid
+
+    freeCMND(response);
+
+    printf("Project '%s' has been removed from the server\n", command->args[0]);
+
+    return 0;
+
 }
 
 int _add(ClientCommand* command) {

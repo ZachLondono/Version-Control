@@ -128,18 +128,38 @@ int _destroynet(NetworkCommand* command, int sockfd) {
 	// arg[0] = project name
 	char* name = malloc(9);
 	memcpy(name, "destroy", 9);
-	char* reason = malloc(16);
-	memcpy(reason, "not implimented", 16);
-	NetworkCommand* response = newFailureCMND(name, reason);	
+
+	if (!checkcommand(command, 1, name,sockfd,1)) return -1;
+
+	char* removecmnd = malloc(26 + command->arglengths[0]);
+	sprintf(removecmnd, "rm -r -f %s >/dev/null 2>&1", command->argv[0]);
+
+	if (system(removecmnd) != 0) {
+		char* reason = malloc(25);
+		memset(reason, '\0',25);
+		memcpy(reason, "couldn't destroy project", 25);
+		NetworkCommand* response = newFailureCMND_B(name, reason, 25);
+		sendNetworkCommand(response, sockfd);
+		freeCMND(response);
+		free(removecmnd);
+		return -1;
+	}
+	free(removecmnd);
+
+	char* reason = malloc(22);
+	memset(reason, '\0', 22);
+	memcpy(reason, "Project was destroyed", 22);
+	NetworkCommand* response = newSuccessCMND_B(name, reason, 21);	
 	sendNetworkCommand(response, sockfd);
 	return 0;
 }
 
 int _projectnet(NetworkCommand* command, int sockfd) {
 	// arg[0] = project name
-	
 	char* name = malloc(9);
 	memcpy(name, "project", 9);
+
+	if (!checkcommand(command, 1, name,sockfd,1)) return -1;
 
 	int deflatedsize = 0;
 	char* compressed = getcompressedfile(command->argv[0], &deflatedsize);
@@ -169,12 +189,15 @@ int _versionnet(NetworkCommand* command, int sockfd) {
 	memset(name, '\0', 9);
 	memcpy(name, "version", 9);
 
+	// Check project exists and request is formatted correctly
 	if (!checkcommand(command, 1, name,sockfd,1)) return -1;
 	
+	// Get version from project's manifest
 	int version = projectVersion(command->argv[0], &serverreadfile);
 	char* reason = malloc(digitCount(version) + 1);
 	memset(reason, '\0', digitCount(version) + 1);
 	snprintf(reason, digitCount(version)+1, "%d", version);
+
 	NetworkCommand* response = newSuccessCMND(name, reason);
 	sendNetworkCommand(response, sockfd);
 	freeCMND(response);
