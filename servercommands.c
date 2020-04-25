@@ -148,7 +148,9 @@ int _destroynet(NetworkCommand* command, int sockfd) {
 	char* removecmnd = malloc(26 + command->arglengths[0]);
 	sprintf(removecmnd, "rm -r -f %s >/dev/null 2>&1", command->argv[0]);
 
+	pthread_mutex_lock(&repo_lock);
 	if (system(removecmnd) != 0) {
+		pthread_mutex_unlock(&repo_lock);
 		char* reason = malloc(25);
 		memset(reason, '\0',25);
 		memcpy(reason, "couldn't destroy project", 25);
@@ -158,6 +160,7 @@ int _destroynet(NetworkCommand* command, int sockfd) {
 		free(removecmnd);
 		return -1;
 	}
+	pthread_mutex_unlock(&repo_lock);
 	free(removecmnd);
 
 	char* reason = malloc(22);
