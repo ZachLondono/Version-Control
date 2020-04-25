@@ -32,8 +32,9 @@ int digitCount(int num);
 int strshift(char* word, int populatedbytes, size_t buffsize, int offset);
 int incrimentManifest(char* project, FileContents* (*readfile)(char*), ssize_t (*write)(int fd, char* buff, int count));
 int projectVersion(char* project, FileContents* (*readfile)(char*));
+int createcompressedarchive(char* filepath, int pathlen);
 int getManifestVersion(FileContents* manifest);
-char* getcompressedfile(char* filepath, int* deflated_size);
+char* getcompressedfile(char* filepath, int* deflated_size, int (*opencmnd)(const char*, int), ssize_t (*readcmnd)(int, char*, size_t));
 int recreatefile(char* filepath, char* contents, int size);
 int uncompressfile(char* compressedpath);
 

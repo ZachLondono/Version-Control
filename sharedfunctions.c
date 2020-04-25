@@ -173,18 +173,25 @@ int getManifestVersion(FileContents* manifest) {
 
 }
 
-char* getcompressedfile(char* filepath, int* deflated_size) {
-
-	int pathlen = strlen(filepath);
-	int cmndlen = 26 + pathlen;
-
-	char* tarcmnd = malloc(cmndlen);
+int createcompressedarchive(char* filepath, int pathlen) {
+	int cmndlen = 26 + pathlen + 1;
+    char* tarcmnd = malloc(cmndlen);
 	memset(tarcmnd,'\0', cmndlen);
-	snprintf(tarcmnd, cmndlen, "tar -czf archive.tar.gz %s", filepath);
-	if (system(tarcmnd) != 0) return NULL;
+	snprintf(tarcmnd, cmndlen, "tar -czvf archive.tar.gz %s", filepath);
+	if (system(tarcmnd) != 0) {
+        printf("tar command failed\n");
+        return -1;
+    }
 	free(tarcmnd);
+    return 0;
+}
 
-	int fd = open("archive.tar.gz", O_RDWR);
+char* getcompressedfile(char* filepath, int* deflated_size, int (*opencmnd)(const char*, int), ssize_t (*readcmnd)(int, char*, size_t)) {
+
+    int pathlen = strlen(filepath);
+    if (createcompressedarchive(filepath, pathlen) < 0) return NULL;
+
+	int fd = opencmnd("archive.tar.gz", O_RDWR);
 	if (fd < 0) {
 		printf("Error: couldn't read compressed data\n");
 		return NULL;
@@ -197,7 +204,7 @@ char* getcompressedfile(char* filepath, int* deflated_size) {
 
 	char* deflated_content = malloc(size);
 	int readin = 0, status = 0;
-	while ((status = read(fd, &deflated_content[readin], size - readin)) > 0) readin += status;
+	while ((status = readcmnd(fd, &deflated_content[readin], size - readin)) > 0) readin += status;
 
 	close(fd);
 
