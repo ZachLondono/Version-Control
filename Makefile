@@ -12,4 +12,7 @@ clean:
 	rm server
 	rm client
 
+setup:
+	cp client ../testclient/
+	cp server ../testserver/
 
