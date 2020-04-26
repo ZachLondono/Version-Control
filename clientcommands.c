@@ -35,6 +35,7 @@ NetworkCommand* newrequest(ClientCommand* command, int argc) {
 NetworkCommand* newfilerequest(char* project, char** filepaths, int filecount) {
 
     NetworkCommand* request = malloc(sizeof(NetworkCommand));
+    request->type = filenet;
     request->argc = 2 + filecount;
     request->arglengths = malloc(sizeof(int) * request->argc);
     request->argv = malloc(sizeof(char*) * request->argc);
@@ -138,7 +139,6 @@ int _checkout(ClientCommand* command) {
     char** files = malloc(sizeof(char*));
     files[0] = ".";
     NetworkCommand* request = newfilerequest(command->args[0], files, 1);
-    request->type = filenet;
 
     int sockfd = connectwithconfig();
     if (sockfd < 0) {
@@ -173,8 +173,241 @@ int _upgrade(ClientCommand* command) {
 }
 
 int _commit(ClientCommand* command) {
-    printf("commit not implimented\n");
-    return -1;
+
+    if (!checkForLocalProj(command->args[0])) {
+        printf("Error: Local project does not exist. Checkout project from server or create a new one.\n");
+        return -1;
+    }
+
+    int projlen = strlen(command->args[0]);
+
+    char* conflictpath = malloc(projlen + 11);
+    memset(conflictpath, '\0', projlen + 11);
+    sprintf(conflictpath, "%s/.Conflict", command->args[0]);
+    int fd = open(conflictpath, O_RDONLY);
+    if (fd > 0) {
+        printf("Error: Conflicts in project '%s' exist. Resolve conflict before attempting to commit.\n", command->args[0]);
+        free(conflictpath);
+        close(fd);
+        return -1;
+    }
+    close(fd);
+    free(conflictpath);
+
+    char* updatepath = malloc(projlen + 9);
+    memset(updatepath, '\0', projlen + 9);
+    sprintf(updatepath, "%s/.Update", command->args[0]);
+    fd = open(updatepath, O_RDONLY);
+    if (fd > 0) {
+        int size = lseek(fd, 0, SEEK_END);
+        close(fd);
+        if (size != 0) {
+            printf("Error: Project '%s' has pending updates. Upgrade before attempting to commit.\n", command->args[0]);
+            free(updatepath);
+            return -1;
+        } else remove(updatepath);
+    }
+    close(fd);
+    free(updatepath);
+
+    char* manifestpath = ".Manifest";
+    NetworkCommand* request = newfilerequest(command->args[0], &manifestpath, 1);
+
+    int sockfd = connectwithconfig();
+    if (sockfd < 0) return sockfd;
+
+    sendNetworkCommand(request, sockfd);
+    NetworkCommand* response = readMessage(sockfd);
+    freeCMND(request);
+    close(sockfd);
+
+    if (checkresponse("file", response) < 0) return -1;
+    
+    int checkfolder = 0;
+    if (!opendir(".tempfeils")) checkfolder = mkdir(".tempfiles", 0700);
+
+    if (checkfolder == 0) {
+        chdir(".tempfiles");
+        recreatefile("archive.tar.gz", response->argv[2], response->arglengths[2]);
+        uncompressfile("archive.tar.gz");
+        chdir("..");
+
+        freeCMND(response);
+
+        char* servermanifestpath = malloc(23 + projlen);
+        memset(servermanifestpath, '\0', 23 + projlen);
+        sprintf(servermanifestpath, ".tempfiles/%s/.Manifest", command->args[0]);
+        FileContents* servermanifest = readfile(servermanifestpath);
+        free(servermanifestpath);
+
+        char* localmanifestpath = malloc(11 + projlen);
+        memset(localmanifestpath, '\0', 11 + projlen);
+        sprintf(localmanifestpath, "%s/.Manifest", command->args[0]);
+        FileContents* localmanifestfile = readfile(localmanifestpath);
+        free(localmanifestpath);
+
+        if (getManifestVersion(servermanifest) != getManifestVersion(localmanifestfile)) {
+            printf("Error: Remote project is ahead of local project. Update before attempting to commit.");
+            freefile(localmanifestfile);
+            freefile(servermanifest);
+            return -1;
+        }
+
+        Manifest* localmanifest = parseManifest(localmanifestfile);
+        char** files = getManifestFiles(localmanifest);
+        char** hashcodes = getManifestHashcodes(localmanifest);
+
+        Manifest* remotemanifest = parseManifest(servermanifest);
+        char** remotefiles = getManifestFiles(remotemanifest);
+        char** remotehashcodes = getManifestHashcodes(remotemanifest);
+
+        if (localmanifest->entrycount == 0 && remotemanifest->entrycount == 0) {
+            printf("There are no changes to commit\n");
+            freeManifest(localmanifest);
+            freeManifest(remotemanifest);
+            freefile(localmanifestfile);
+            freefile(servermanifest);
+            return -1;
+        }
+
+        char* commit = malloc(localmanifestfile->size);
+        memset(commit, '\0', localmanifestfile->size);
+        int commitlen = 0;
+
+        freefile(localmanifestfile);
+        freefile(servermanifest);
+
+        /* 
+            Modify
+            1) livehash != localhash
+            2) localhash == serverhash
+
+            Add
+            1) file is in localmanifest 
+            2) file is not in remotemanifest
+
+            Remove
+            1) file is in remotemanifest
+            2) file is not in localmanifest
+        */
+
+        int i = 0;
+        for(i = 0; i < localmanifest->entrycount; i++) {
+
+            int j = 0;
+            int new = 1;
+            for (j = 0; j < remotemanifest->entrycount; j++) {
+                if (strcmp(files[i], remotefiles[j]) != 0) continue;        // file is included in remote manifest
+                new = 0;
+                break;
+            }
+
+            if (new) {
+                // Add condition
+                char* commitentry = malloc(strlen(files[i]) + 45);
+                memset(commitentry, '\0', strlen(files[i]) + 45);
+                sprintf(commitentry, "D %s", files[i]); 
+                printf("%s\n", commitentry);
+                sprintf(commitentry, "A %s %s\n", files[i], hashcodes[i]);
+                strcat(commit, commitentry);
+                free(commitentry);
+                commitlen += strlen(files[i]) + 45;
+            } else {
+                // file is already in remote, check that is up to date with live file
+                FileContents* livecontent = readfile(files[i]);
+                unsigned char* livehashcode = hashdata((unsigned char*) livecontent->content, livecontent->size);
+
+                if (strcmp((const char*)livehashcode, (const char*) hashcodes[i]) != 0) {
+                    if (strcmp((const char*)hashcodes[i],(const char*) remotehashcodes[j]) != 0) {    // check that local manifest hash matches the server manifest hash
+                        printf("Error: There is an inconsistency between the remote project and the local project, skiping file '%s'\n", files[i]);
+                        freefile(livecontent);
+                        free(livehashcode);
+                        continue;
+                    }
+
+                    // Modify condition
+                    char* commitentry = malloc(strlen(files[i]) + 45);
+                    memset(commitentry, '\0', strlen(files[i]) + 45);
+                    sprintf(commitentry, "D %s", files[i]); 
+                    printf("%s\n", commitentry);
+                    sprintf(commitentry, "M %s %s\n", files[i], hashcodes[i]); 
+                    strcat(commit, commitentry);
+                    free(commitentry);
+                    commitlen += strlen(files[i]) + 45;
+                }
+                freefile(livecontent);
+            }
+
+        }
+
+        for(i = 0; i < remotemanifest->entrycount; i++) {
+            
+            int j = 0;
+            int removed = 1;
+            for (j = 0; j < localmanifest->entrycount; j++) {
+                if (strcmp(files[j], remotefiles[i]) != 0) continue;
+                removed = 0;
+                break;
+            }
+            
+            if (removed) {
+                // Delete condition
+                char* commitentry = malloc(strlen(remotefiles[i]) + 45);
+                memset(commitentry, '\0', strlen(remotefiles[i]) + 45);
+                sprintf(commitentry, "D %s", remotefiles[i]); 
+                printf("%s\n", commitentry);
+                sprintf(commitentry, "D %s %s\n", remotefiles[i], remotehashcodes[i]); 
+                strcat(commit, commitentry);
+                free(commitentry);
+                commitlen += strlen(remotefiles[i]) + 45;
+            }
+
+        }            
+
+        for (i = 0; i < localmanifest->entrycount; i++) {
+            free(files[i]);
+            free(hashcodes[i]);
+        }
+        for (i = 0; i < remotemanifest->entrycount; i++) {
+            free(remotefiles[i]);
+            free(remotehashcodes[i]);
+        }
+        free(files);
+        free(hashcodes);
+        free(remotefiles);
+        free(remotehashcodes);
+
+        freeManifest(remotemanifest);
+        freeManifest(localmanifest);
+
+        char* commitpath = malloc(9 + projlen);
+        memset(commitpath, '\0', 9 + projlen);
+        sprintf(commitpath, "%s/.Commit", command->args[0]);
+        fd = open(commitpath, O_RDWR | O_CREAT, S_IRWXU);
+        if (fd < 0) {
+            printf("Error: Could not open or create commit file. Make sure file permissions have not been changed\n");
+            close(fd);
+            free(commitpath);
+            return -1; 
+        }
+
+        free(commitpath);
+
+        if (commitlen == '\0') {
+            printf("There are no changes to commit. The local files are all up to date.\n");
+            close(fd);
+            free(commit);
+            return -1;
+        }
+
+        write(fd, commit, commitlen - 1);      // TODO MAKE SURE ALL BYTES ARE WRITTEN TO FILE
+        free(commit);
+        close(fd);
+
+    } else freeCMND(response);
+
+    return 0;
+
 }
 
 int _push(ClientCommand* command) {
