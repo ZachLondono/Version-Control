@@ -216,7 +216,7 @@ char* getcompressedfile(char* filepath, int* deflated_size, int (*opencmnd)(cons
 
 int recreatefile(char* filepath, char* contents, int size) {
 	int fd = open(filepath, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
-	if (fd < 0) printf("Error: failed to recreate file\n");
+    if (fd < 0) printf("Error: failed to recreate file\n");
 	else write(fd, contents, size);                             //TODO MAKE SURE ALL DATA WAS WRITTEN
 	close(fd);
     return fd >= 0 ? 0 : -1;
@@ -250,4 +250,106 @@ char* strrmove(char* str, const char* sub) {
         while((*q++ = *p++) != '\0') continue;
     }
     return str;
+}
+
+Manifest* parseManifest(FileContents* filecontent) {
+
+    int entrycount = -1;
+    int i = 0;
+    for(i = 0; i < filecontent->size; i++) if (filecontent->content[i] == '\n') entrycount++;
+    if (entrycount < 0) return NULL;
+
+    Manifest* manifest = malloc(sizeof(Manifest));
+
+    manifest->entrycount = entrycount;
+    
+    manifest->entries = malloc(entrycount * sizeof(char*)); 
+    char* version = strtok(filecontent->content, "\n");
+
+    if (!isNum(version, strlen(version))) {
+        printf("Error: malformed Manifest file\n");
+        free(manifest);
+        return NULL;
+    }
+
+    manifest->version = atoi(version);
+
+    for(i = 0; i < entrycount; i++) {
+        char* entry = strtok(NULL, "\n");
+        manifest->entries[i] = malloc(strlen(entry) + 1);
+        memset(manifest->entries[i], '\0', strlen(entry) + 1);
+        memcpy(manifest->entries[i], entry, strlen(entry) + 1);
+    }
+
+    return manifest;
+
+}
+
+char** getManifestFiles(Manifest* manifest) {
+
+    if (manifest->entrycount == 0) return NULL;
+
+    char** filepaths = malloc(sizeof(char*) * manifest->entrycount);
+
+    int i = 0;
+    for (i = 0; i < manifest->entrycount; i++) {
+
+        char* entry = malloc(strlen(manifest->entries[i]) + 1);
+        memset(entry, '\0', strlen(manifest->entries[i]) + 1);
+        memcpy(entry, manifest->entries[i], strlen(manifest->entries[i]) + 1);
+
+        strtok(entry, " ");
+        char* filepath = strtok(NULL, " ");
+        int len = strlen(filepath);
+        filepaths[i] = malloc(len + 1);
+        memset(filepaths[i], '\0', len + 1);
+        memcpy(filepaths[i], filepath, len);
+
+        free(entry);
+
+    }
+
+    return filepaths;
+
+}
+
+char** getManifestHashcodes(Manifest* manifest) {
+
+    if (manifest->entrycount == 0) return NULL;
+
+    char** hashcodes = malloc(sizeof(char*) * manifest->entrycount);
+
+    int i = 0;
+    for (i = 0; i < manifest->entrycount; i++) {
+        
+        char* entry = malloc(strlen(manifest->entries[i]) + 1);
+        memset(entry, '\0', strlen(manifest->entries[i]) + 1);
+        memcpy(entry, manifest->entries[i], strlen(manifest->entries[i]) + 1);
+
+
+        strtok(entry, " ");
+        strtok(NULL, " ");
+        char* hashcode = strtok(NULL, "\n");
+        int len = strlen(hashcode);
+        hashcodes[i] = malloc(len + 1);
+        memset(hashcodes[i], '\0', len + 1);
+        memcpy(hashcodes[i], hashcode, len);
+
+        free(entry);
+
+    }
+
+    return hashcodes;
+
+}
+
+void freeManifest(Manifest* manifest) {
+
+    int i = 0;
+    for(i = 0; i < manifest->entrycount; i++) {
+        free(manifest->entries[i]);
+    }
+    free(manifest->entries);
+    free(manifest);
+
 }

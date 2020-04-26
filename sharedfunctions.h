@@ -19,6 +19,12 @@ typedef struct FileContents{
     int fd;
 } FileContents;
 
+typedef struct _Manifest {
+    int version;
+    char** entries;
+    int entrycount;
+} Manifest;
+
 int checkForLocalProj(char* projname);
 char* bin2hex(const unsigned char *bin, size_t len);
 int hexchr2bin(const char hex, char* out);
@@ -37,5 +43,9 @@ int getManifestVersion(FileContents* manifest);
 char* getcompressedfile(char* filepath, int* deflated_size, int (*opencmnd)(const char*, int), ssize_t (*readcmnd)(int, char*, size_t));
 int recreatefile(char* filepath, char* contents, int size);
 int uncompressfile(char* compressedpath);
+Manifest* parseManifest(FileContents* filecontent);
+char** getManifestFiles(Manifest* manifest);
+char** getManifestHashcodes(Manifest* manifest);
+void freeManifest(Manifest* manifest);
 
 #endif
