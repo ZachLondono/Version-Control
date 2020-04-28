@@ -121,11 +121,11 @@ int main(int argc, char** argv) {
 
 		int* fd = malloc(sizeof(int));
 		*fd = clisockfd;
-        pthread_mutex_lock(&queue_lock);
-        pthread_cond_signal(&new_command);
+        	pthread_mutex_lock(&queue_lock);
+       		pthread_cond_signal(&new_command);
 		enqueue(fd);	
-        pthread_mutex_unlock(&queue_lock);
-
+        	pthread_mutex_unlock(&queue_lock);
+	
 	}
 
 	printf("An error occured while accepting new connections: %s\n", strerror(errno));
