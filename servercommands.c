@@ -19,7 +19,12 @@ int checkcommand(NetworkCommand* command, int expectedargs, char* name, int sock
 		char* reason = malloc(18);
 		memset(reason, '\0', 18);
 		memcpy(reason, "Malformed message", 18);	
-		NetworkCommand* response = newFailureCMND(name, reason);	
+
+		char* name_cpy = malloc(strlen(name) + 1);
+		memset(name_cpy, '\0', strlen(name) + 1);
+		memcpy(name_cpy, name, strlen(name) + 1);
+
+		NetworkCommand* response = newFailureCMND(name_cpy, reason);	
 		sendNetworkCommand(response, sockfd);
 		freeCMND(response);
 		return 0;
@@ -39,7 +44,11 @@ int checkcommand(NetworkCommand* command, int expectedargs, char* name, int sock
 			memcpy(reason, "Project does not exist", 24);	
 		}
 
-		NetworkCommand* response = newFailureCMND(name, reason);	
+		char* name_cpy = malloc(strlen(name) + 1);
+		memset(name_cpy, '\0', strlen(name) + 1);
+		memcpy(name_cpy, name, strlen(name) + 1);
+
+		NetworkCommand* response = newFailureCMND(name_cpy, reason);	
 		sendNetworkCommand(response, sockfd);
 		freeCMND(response);
 		return 0;
@@ -303,6 +312,52 @@ int _filenet(NetworkCommand* command, int sockfd) {
 
 }
 
+int clientcommit(NetworkCommand* command, int sockfd) {
+
+	command->type = filenet;
+	if (_filenet(command, sockfd) < 0) {
+		printf("Failed to send server Manifest to client\n");
+		return -1;
+	}
+
+	NetworkCommand* commitfile = readMessage(sockfd);
+
+	char* name = malloc(5);
+	memset(name,'\0', 5);
+	memcpy(name, "data", 5);
+
+	printf("args: %d\n", commitfile->argc);
+	if(!checkcommand(commitfile, 2, name, sockfd, 1)) {
+		printf("Failed to recieve client's changes\n");
+		return -1;
+	}
+
+	printf("\n\n***********\nClient's Commit\n%s", commitfile->argv[1]);
+	freeCMND(commitfile);
+
+	char* reason = malloc(6);
+	memset(reason,'\0', 6);
+	memcpy(reason, "cause", 6);
+	NetworkCommand* response = newSuccessCMND(name, reason);
+	sendNetworkCommand(response, sockfd);
+	freeCMND(response);
+
+	return 0;
+
+}
+
+// int _data(NetworkCommand* command, int sockfd) {
+
+// 	char* name = malloc(5);
+// 	memset(name, '\0', 5);
+// 	memcpy(name, "data", 5);
+
+// 	if (!checkcommand(command, 2, name, sockfd, 1)) return -1;
+
+// 	//command->argv[1] contains a tar.gz with file to be copied into the server
+
+// }
+
 int executecommand(NetworkCommand* command, int sockfd) {
 
 	switch (command->type){
@@ -324,6 +379,12 @@ int executecommand(NetworkCommand* command, int sockfd) {
 		case filenet:
 			return _filenet(command, sockfd);
 			break;
+		case commitnet:
+			return clientcommit(command, sockfd);
+			break;
+		// case data:
+		// 	return _data(command, sockfd);
+		// 	break;
 		default:
 			return -1;
 			break;
