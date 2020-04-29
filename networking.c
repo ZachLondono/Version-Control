@@ -117,6 +117,10 @@ NetworkCommand* readMessage(int sockfd) {
 		command->type = filenet;
 	} else if (strcmp(commandname, "response") == 0) {
 		command->type = responsenet;
+	} else if (strcmp(commandname, "data") == 0) {
+		command->type = data;
+	} else if (strcmp(commandname, "commit") == 0) {
+		command->type = commitnet;
 	} else {
 		char* name = malloc(CMND_NAME_MAX + 1);
 		memset(name, '\0', CMND_NAME_MAX + 1);
@@ -160,12 +164,14 @@ char* readSection(int fd, int upperbound, char** contbuffer, int* buffersize, in
 		int amount = ignoreDelim ? upperbound - *populatedbytes : 1;			 // if we don't want to ignore delimiters, we will read in 1 byte at a time, so we do not end up blocking by trying to overread 
         int status = 0;
         while ((status = read(fd, &(*contbuffer)[*populatedbytes], amount)) > 0) {
-                *populatedbytes += status;
+				if (amount != 1 || (*contbuffer)[*populatedbytes] != '\0') *populatedbytes += status;
 				amount = ignoreDelim ? upperbound - *populatedbytes : 1;
+				if (*populatedbytes == 0) continue;
 				if (*populatedbytes >= upperbound || (!ignoreDelim && (*contbuffer)[*populatedbytes - 1] == ':')) break;	// if we are waiting for a delim, and we found one, stop reading
 		}
 		if (status < 0 ) {
 			printf("couldnt read message: %s\n", strerror(errno));
+			return NULL;
 		}
 		(*contbuffer)[upperbound] = '\0';                                      //make sure buffer ends with null byte
     }
@@ -182,6 +188,7 @@ char* readSection(int fd, int upperbound, char** contbuffer, int* buffersize, in
         memcpy(ret, *contbuffer, upperbound);
 		strshift((*contbuffer), *populatedbytes, *buffersize, upperbound); 	// skip over used bytes
 		*populatedbytes -= upperbound;
+		if (*populatedbytes < 0) *populatedbytes = 0;
         return ret;
     }
 
@@ -203,6 +210,7 @@ char* readSection(int fd, int upperbound, char** contbuffer, int* buffersize, in
 
     strshift((*contbuffer), *populatedbytes, *buffersize, readindex + 1);    // readindex is the index of the last character before the delimiter, add 1 to skip delim
 	*populatedbytes -= readindex + 1;
+	if (*populatedbytes < 0) *populatedbytes = 0;
 	return ret;
 
 }
@@ -254,6 +262,14 @@ int sendNetworkCommand(NetworkCommand* command, int sockfd) {
 			strcat(message,"invalid");
 			msgindex += 7;
 			break;
+		case commitnet:
+			strcat(message, "commit");
+			msgindex += 6;
+			break;
+		case data:
+			strcat(message, "data");
+			msgindex += 4;
+			break;
 		default:
 			free(message);
 			printf("Error: invalid message to send\n");
@@ -293,6 +309,8 @@ int sendNetworkCommand(NetworkCommand* command, int sockfd) {
 	// network protocoll structure: <command>:<argument count>:<argument 1 length>:<argument 1><argument 2 length>:<argument 3> ...
 	// note: there is no deliminer between an argument's content and it's following argument's length
 	int ret = write(sockfd, message, messagelen);
+	printf(message);
+	printf("\n");
 	free(message);
 
 	return ret;
