@@ -255,22 +255,43 @@ int _commit(ClientCommand* command) {
         return -1;
     }
 
+    Commit* commit = createcommit(response->argv[2], response->arglengths[2], command->args[0], projlen);
+
+    NetworkCommand* toSend = newDataTransferCmnd(command->args[0], commit->filecontent, commit->filesize - 1);      // Send commit file to server
+    sendNetworkCommand(toSend, sockfd);
+    freeCMND(toSend);
+    free(commit);
+    
+
+    NetworkCommand* finalresponse = readMessage(sockfd);                         // check that server recieved commit successfully
+    if (checkresponse("data", finalresponse) != 0)  {
+        printf("Error: server couldn't read commit file\n");
+        return -1;
+    }
+
+    printf("Successfully commit changes\n");
+    freeCMND(finalresponse);
+
+    return 0;
+
+}
+
+Commit* createcommit(char* remoteManifest, int remotelen, char* project, int projlen) {
+
     chdir(".tempfiles");
-    recreatefile("archive.tar.gz", response->argv[2], response->arglengths[2]);
+    recreatefile("archive.tar.gz", remoteManifest, remotelen);
     uncompressfile("archive.tar.gz");
     chdir("..");
 
-    freeCMND(response); 
-
     char* servermanifestpath = malloc(23 + projlen);
     memset(servermanifestpath, '\0', 23 + projlen);
-    sprintf(servermanifestpath, ".tempfiles/%s/.Manifest", command->args[0]);
+    sprintf(servermanifestpath, ".tempfiles/%s/.Manifest", project);
     FileContents* servermanifest = readfile(servermanifestpath);
     free(servermanifestpath);
 
     char* localmanifestpath = malloc(11 + projlen);
     memset(localmanifestpath, '\0', 11 + projlen);
-    sprintf(localmanifestpath, "%s/.Manifest", command->args[0]);
+    sprintf(localmanifestpath, "%s/.Manifest", project);
     FileContents* localmanifestfile = readfile(localmanifestpath);
     free(localmanifestpath);
 
@@ -278,7 +299,7 @@ int _commit(ClientCommand* command) {
         printf("Error: Remote project is ahead of local project. Update before attempting to commit.");
         freefile(localmanifestfile);
         freefile(servermanifest);
-        return -1;
+        return NULL;
     }
 
     Manifest* localmanifest = parseManifest(localmanifestfile);
@@ -295,12 +316,14 @@ int _commit(ClientCommand* command) {
         freeManifest(remotemanifest);
         freefile(localmanifestfile);
         freefile(servermanifest);
-        return -1;
+        return NULL;
     }
 
-    char* commit = malloc(localmanifestfile->size);
-    memset(commit, '\0', localmanifestfile->size);
-    int commitlen = 0;
+    Commit* commit = malloc(sizeof(Commit));
+
+    commit->filecontent = malloc(localmanifestfile->size);
+    memset(commit->filecontent, '\0', localmanifestfile->size);
+    commit->filesize = 0;
 
     freefile(localmanifestfile);
     freefile(servermanifest);
@@ -337,9 +360,9 @@ int _commit(ClientCommand* command) {
             sprintf(commitentry, "A %s", files[i]); 
             printf("%s\n", commitentry);
             sprintf(commitentry, "A %s %s\n", files[i], hashcodes[i]);
-            strcat(commit, commitentry);
+            strcat(commit->filecontent, commitentry);
             free(commitentry);
-            commitlen += strlen(files[i]) + 45;
+            commit->filesize += strlen(files[i]) + 45;
         } else {
             // file is already in remote, check that is up to date with live file
             FileContents* livecontent = readfile(files[i]);
@@ -359,9 +382,9 @@ int _commit(ClientCommand* command) {
                 sprintf(commitentry, "M %s", files[i]); 
                 printf("%s\n", commitentry);
                 sprintf(commitentry, "M %s %s\n", files[i], hashcodes[i]); 
-                strcat(commit, commitentry);
+                strcat(commit->filecontent, commitentry);
                 free(commitentry);
-                commitlen += strlen(files[i]) + 45;
+                commit->filesize  += strlen(files[i]) + 45;
             }
             freefile(livecontent);
         }
@@ -385,9 +408,9 @@ int _commit(ClientCommand* command) {
             sprintf(commitentry, "D %s", remotefiles[i]); 
             printf("%s\n", commitentry);
             sprintf(commitentry, "D %s %s\n", remotefiles[i], remotehashcodes[i]); 
-            strcat(commit, commitentry);
+            strcat(commit->filecontent, commitentry);
             free(commitentry);
-            commitlen += strlen(remotefiles[i]) + 45;
+            commit->filesize += strlen(remotefiles[i]) + 45;
         }
 
     }            
@@ -410,43 +433,28 @@ int _commit(ClientCommand* command) {
 
     char* commitpath = malloc(9 + projlen);
     memset(commitpath, '\0', 9 + projlen);
-    sprintf(commitpath, "%s/.Commit", command->args[0]);
-    fd = open(commitpath, O_RDWR | O_CREAT, S_IRWXU);
+    sprintf(commitpath, "%s/.Commit", project);
+    int fd = open(commitpath, O_RDWR | O_CREAT, S_IRWXU);
     if (fd < 0) {
         printf("Error: Could not open or create commit file. Make sure file permissions have not been changed\n");
         close(fd);
         free(commitpath);
-        return -1; 
+        return NULL; 
     }
 
     free(commitpath);
 
-    if (commitlen == '\0') {
+    if (commit->filesize == '\0') {
         printf("There are no changes to commit. The local files are all up to date.\n");
         close(fd);
         free(commit);
-        return -1;
+        return NULL;
     }
 
-    write(fd, commit, commitlen - 1);      // TODO MAKE SURE ALL BYTES ARE WRITTEN TO FILE
+    write(fd, commit->filecontent, commit->filesize - 2);      // TODO MAKE SURE ALL BYTES ARE WRITTEN TO FILE
     close(fd);
 
-    NetworkCommand* toSend = newDataTransferCmnd(command->args[0], commit, commitlen - 1);      // Send commit file to server
-    sendNetworkCommand(toSend, sockfd);
-    freeCMND(toSend);
-    free(commit);
-    
-
-    NetworkCommand* finalresponse = readMessage(sockfd);                         // check that server recieved commit successfully
-    if (checkresponse("data", finalresponse) != 0)  {
-        printf("Error: server couldn't read commit file\n");
-        return -1;
-    }
-
-    printf("Successfully commit changes\n");
-    freeCMND(finalresponse);
-
-    return 0;
+    return commit;
 
 }
 

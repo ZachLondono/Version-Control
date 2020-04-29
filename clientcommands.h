@@ -29,6 +29,7 @@ typedef struct Configuration {
 Configuration* loadConfig();
 void freeConfig(Configuration* config);
 int connectwithconfig();
+Commit* createcommit(char* remoteManifest, int remotelen, char* project, int projlen);
 
 int _invalidcommand(ClientCommand* command);
 int _configure(ClientCommand* command);

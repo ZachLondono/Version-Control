@@ -25,6 +25,13 @@ typedef struct _Manifest {
     int entrycount;
 } Manifest;
 
+typedef struct _Commit {
+    int filesize;
+    int entries;
+    char* filecontent;
+    int uid;
+} Commit;
+
 int checkForLocalProj(char* projname);
 char* bin2hex(const unsigned char *bin, size_t len);
 int hexchr2bin(const char hex, char* out);
