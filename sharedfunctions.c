@@ -81,7 +81,10 @@ int strshift(char* word, int populated, size_t buffsize, int offset) {
     int i = 0;
     for(i = 0; i + offset < buffsize; i++) 
         word[i] = word[i + offset];
-    memset(&word[usedbytes - offset], '\0', buffsize-i);
+    int index = usedbytes - offset;
+    if (index < 0) index = 0;
+    if (index >= buffsize) index = buffsize - 1; 
+    memset(&word[index], '\0', buffsize-i);
     return 0;
 }
 
