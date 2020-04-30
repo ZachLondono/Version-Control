@@ -12,6 +12,39 @@ int connectwithconfig() {
 	return sockfd;
 }
 
+int getUID() {
+
+    FileContents* config = readfile(".config");
+    if (!config) {
+        printf("Error: run config before attempting to commit\n");
+        return -2;
+    }
+    char* content = malloc(config->size + 5);
+    memset(content, '\0', config->size + 5);
+    memcpy(content, config->content, config->size);
+    char* uidline = strstr(config->content, "uid");
+    if (!uidline) {
+        memset(content, '\0', config->size + 5);
+        memcpy(content, "uid:",5);
+        write(config->fd, content, 4);
+        free(content);
+        freefile(config);
+        return -1;
+    }
+    free(content);
+
+    strtok(config->content, "\n");
+    strtok(NULL, "\n");
+    strtok(NULL, ":");
+    char* uid = strtok(NULL, "\n");
+    if (isNum(uid, strlen(uid))) {
+        int ret = atoi(uid);
+        freefile(config);
+        return ret;
+    } else return -1;
+
+}
+
 // Initialize and allocate a new NetworkCommand from a ClientCommand to be sent to the server to request some data
 NetworkCommand* newrequest(ClientCommand* command, int argc) {
     
@@ -232,9 +265,26 @@ int _commit(ClientCommand* command) {
     close(fd);
     free(updatepath);
 
-    char* manifestpath = ".Manifest";
-    NetworkCommand* request = newfilerequest(command->args[0], &manifestpath, 1);           //TODO change file request to commit
-    request->type = commitnet;
+    char** requestArgs = malloc(sizeof(char*) * 2);
+    requestArgs[0] = malloc(10);
+    memcpy(requestArgs[0], ".Manifest", 10);
+
+    int uid = getUID();
+    if (uid == -2) {
+        free(requestArgs);
+        return -1;
+    }
+    requestArgs[1] = uid == -1 ? malloc(3) : malloc(digitCount(uid) + 1);
+    sprintf(requestArgs[1], "%d", uid);
+
+    NetworkCommand* request = newfilerequest(command->args[0], requestArgs, 2);
+    request->type = commitnet;                                                              // modifying a file request into a commit request
+    memset(request->argv[1], '\0', request->arglengths[1]);
+    memcpy(request->argv[1], "1", 2);
+
+    free(requestArgs[0]);
+    free(requestArgs[1]);
+    free(requestArgs);
 
     int sockfd = connectwithconfig();
     if (sockfd < 0) return sockfd;
@@ -256,20 +306,41 @@ int _commit(ClientCommand* command) {
     }
 
     Commit* commit = createcommit(response->argv[2], response->arglengths[2], command->args[0], projlen);
+    freeCMND(response);
+
+    if (!commit) {
+        char* name = malloc(7);
+        memset(name, '\0', 7);
+        memcpy(name, "commit", 7);
+        char* reason = malloc(21);
+        memset(reason, '\0', 21);
+        memcpy(reason, "no changes to commit", 21);
+        NetworkCommand* cancel = newFailureCMND(name, reason);
+        sendNetworkCommand(cancel, sockfd);
+        freeCMND(cancel);
+        return -1;
+    }
 
     NetworkCommand* toSend = newDataTransferCmnd(command->args[0], commit->filecontent, commit->filesize - 1);      // Send commit file to server
     sendNetworkCommand(toSend, sockfd);
     freeCMND(toSend);
-    free(commit);
     
 
     NetworkCommand* finalresponse = readMessage(sockfd);                         // check that server recieved commit successfully
     if (checkresponse("data", finalresponse) != 0)  {
         printf("Error: server couldn't read commit file\n");
+        freeCommit(commit);
         return -1;
     }
 
-    printf("Successfully commit changes\n");
+    if (uid != atoi(finalresponse->argv[2])) {                                   // if the server sent a different uid than the one save, replace local
+        FileContents* config = readfile(".config");
+        write(config->fd, finalresponse->argv[2], strlen(finalresponse->argv[2]));
+        freefile(config);
+    }
+
+    printf("Successfully commit %d change(s) -> uid: %s\n", commit->entries, finalresponse->argv[2]);
+    freeCommit(commit);
     freeCMND(finalresponse);
 
     return 0;
@@ -320,6 +391,8 @@ Commit* createcommit(char* remoteManifest, int remotelen, char* project, int pro
     }
 
     Commit* commit = malloc(sizeof(Commit));
+    commit->entries = 0;
+    commit->uid = -1;
 
     commit->filecontent = malloc(localmanifestfile->size);
     memset(commit->filecontent, '\0', localmanifestfile->size);
@@ -363,6 +436,7 @@ Commit* createcommit(char* remoteManifest, int remotelen, char* project, int pro
             strcat(commit->filecontent, commitentry);
             free(commitentry);
             commit->filesize += strlen(files[i]) + 45;
+            commit->entries += 1;
         } else {
             // file is already in remote, check that is up to date with live file
             FileContents* livecontent = readfile(files[i]);
@@ -385,6 +459,7 @@ Commit* createcommit(char* remoteManifest, int remotelen, char* project, int pro
                 strcat(commit->filecontent, commitentry);
                 free(commitentry);
                 commit->filesize  += strlen(files[i]) + 45;
+                commit->entries += 1;
             }
             freefile(livecontent);
         }
@@ -411,6 +486,7 @@ Commit* createcommit(char* remoteManifest, int remotelen, char* project, int pro
             strcat(commit->filecontent, commitentry);
             free(commitentry);
             commit->filesize += strlen(remotefiles[i]) + 45;
+            commit->entries += 1;
         }
 
     }            
@@ -843,11 +919,3 @@ void freeConfig(Configuration* config) {
     if (config->host != NULL) free(config->host);
     free(config);
 }
-
-
-
-
-
-
-
-

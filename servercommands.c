@@ -4,6 +4,28 @@
 // This mutex and the following three "server" commands should be used when the server is accessing shared resouces as it 
 // will lock access to the repo for other threads, to eliminate race conditions.
 pthread_mutex_t repo_lock = PTHREAD_MUTEX_INITIALIZER;
+int currentuid = 0;
+int maxusers = 0;
+Commit** activecommits = NULL;
+
+int nextUID() {
+
+	if (!activecommits) {					// initalize commit array on first commit
+		maxusers = 10;
+		activecommits = malloc(maxusers * sizeof(Commit*));
+	}
+	if (currentuid == currentuid) {			// resize commit array 
+		maxusers *= 2;
+		Commit** upsized = realloc(activecommits, maxusers * sizeof(Commit*));
+		if (!upsized) {
+			return -1;
+		}
+		activecommits = upsized;
+	}
+
+	int uid = ++currentuid;
+	return uid;
+}
 
 int servercheckForLocalProj(char* projectname) {
 	pthread_mutex_lock(&repo_lock);
@@ -13,7 +35,6 @@ int servercheckForLocalProj(char* projectname) {
 }
 
 int checkcommand(NetworkCommand* command, int expectedargs, char* name, int sockfd, int requireproj) {
-	
 	if (command->argc != expectedargs) {
 		printf("Error: Malformed message from client\n");
 		char* reason = malloc(18);
@@ -315,6 +336,8 @@ int _filenet(NetworkCommand* command, int sockfd) {
 int clientcommit(NetworkCommand* command, int sockfd) {
 
 	command->type = filenet;
+	command->argc = 3;			// Reformat command into a file request, so that it can be proccessed with _filenet function
+
 	if (_filenet(command, sockfd) < 0) {
 		printf("Failed to send server Manifest to client\n");
 		return -1;
@@ -322,22 +345,51 @@ int clientcommit(NetworkCommand* command, int sockfd) {
 
 	NetworkCommand* commitfile = readMessage(sockfd);
 
+	if (commitfile->type == responsenet) {
+		int ret = _responsenet(commitfile, sockfd);
+		freeCMND(commitfile);
+		return ret;
+	} 
+
+	int uid = atoi(command->argv[3]);	// User id is passed as third argument, will be -1 if client does not have one
+	if (uid == -1) uid = nextUID();
+	if (uid == -1) {
+		printf("Error: failed to allocate memory for new commit\n");
+		return -1;
+	}
+	
 	char* name = malloc(5);
 	memset(name,'\0', 5);
 	memcpy(name, "data", 5);
 
-	printf("args: %d\n", commitfile->argc);
 	if(!checkcommand(commitfile, 2, name, sockfd, 1)) {
 		printf("Failed to recieve client's changes\n");
 		return -1;
 	}
 
-	printf("\n\n***********\nClient's Commit\n%s", commitfile->argv[1]);
+	printf("***********\nClient '%d' Commit\n%s***********\n", uid, commitfile->argv[1]);
+
+	if (activecommits[uid] != NULL) {
+		printf("Overwriting client '%d's previous commit\n", uid);
+		free(activecommits[uid]);
+	}
+	
+	Commit* commit = malloc(sizeof(Commit*));
+	commit->uid = uid;
+	commit->filecontent = commitfile->argv[1];
+	commit->filesize = commitfile->arglengths[1];
+	activecommits[uid] = commit;
+
+	int i = 0;
+	for (i = 0; i < maxusers; i++)  {
+		if (activecommits[i] != NULL) printf("commit from '%d'\n", activecommits[i]->uid);
+	}
+
 	freeCMND(commitfile);
 
 	char* reason = malloc(6);
 	memset(reason,'\0', 6);
-	memcpy(reason, "cause", 6);
+	sprintf(reason, "%d", uid);
 	NetworkCommand* response = newSuccessCMND(name, reason);
 	sendNetworkCommand(response, sockfd);
 	freeCMND(response);

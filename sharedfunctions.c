@@ -356,3 +356,8 @@ void freeManifest(Manifest* manifest) {
     free(manifest);
 
 }
+
+void freeCommit(Commit* commit) {
+    free(commit->filecontent);
+    free(commit);
+}

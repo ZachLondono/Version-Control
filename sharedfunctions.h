@@ -54,5 +54,6 @@ Manifest* parseManifest(FileContents* filecontent);
 char** getManifestFiles(Manifest* manifest);
 char** getManifestHashcodes(Manifest* manifest);
 void freeManifest(Manifest* manifest);
+void freeCommit(Commit* commit);
 
 #endif
