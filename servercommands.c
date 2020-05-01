@@ -4,26 +4,38 @@
 // This mutex and the following three "server" commands should be used when the server is accessing shared resouces as it 
 // will lock access to the repo for other threads, to eliminate race conditions.
 pthread_mutex_t repo_lock = PTHREAD_MUTEX_INITIALIZER;
+
+Commit** activecommits = NULL;
 int currentuid = 0;
 int maxusers = 0;
-Commit** activecommits = NULL;
+
+int checkActiveCommitsSize(int uid) {	// will make sure that a given uid exists in the active commits, and that the active commits has been initialized
+	if (uid >= maxusers || activecommits == NULL) {			
+		maxusers = uid + 10;
+		if (activecommits != NULL) {
+			Commit** upsized = realloc(activecommits, maxusers * sizeof(Commit*));	// will resize active commits if neccessary
+			if (!upsized) {
+				printf("Error: couldn't allocate\n");
+				return -1;
+			}
+			activecommits = upsized;
+		} else activecommits = malloc(maxusers * sizeof(Commit*));
+
+		if (!activecommits) return -1;
+
+		int i = 0;
+		for (i = 0; i < maxusers; i++) activecommits[i] = NULL;
+		return 0;
+	}
+	return 0;
+}
 
 int nextUID() {
-
-	if (!activecommits) {					// initalize commit array on first commit
-		maxusers = 10;
-		activecommits = malloc(maxusers * sizeof(Commit*));
+	while(1) {
+		if (checkActiveCommitsSize(++currentuid) < 0) return -1;
+		if (activecommits[currentuid] == NULL) break;
 	}
-	if (currentuid >= maxusers) {			// resize commit array 
-		maxusers *= 2;
-		Commit** upsized = realloc(activecommits, maxusers * sizeof(Commit*));
-		if (!upsized) {
-			return -1;
-		}
-		activecommits = upsized;
-	}
-
-	int uid = ++currentuid;
+	int uid = currentuid;
 	return uid;
 }
 
@@ -369,7 +381,7 @@ int clientcommit(NetworkCommand* command, int sockfd) {
 
 	printf("***********\nClient '%d' Commit\n%s***********\n", uid, commitfile->argv[1]);
 
-	if (activecommits == NULL) activecommits = malloc(uid * sizeof(Commit*));
+	if (checkActiveCommitsSize(uid) < 0) return -1;
 	if (activecommits[uid] != NULL) {
 		printf("Overwriting client '%d's previous commit\n", uid);
 		free(activecommits[uid]);
@@ -380,11 +392,6 @@ int clientcommit(NetworkCommand* command, int sockfd) {
 	commit->filecontent = commitfile->argv[1];
 	commit->filesize = commitfile->arglengths[1];
 	activecommits[uid] = commit;
-
-	int i = 0;
-	for (i = 0; i < maxusers; i++)  {
-		if (activecommits[i] != NULL) printf("commit from '%d'\n", activecommits[i]->uid);
-	}
 
 	freeCMND(commitfile);
 
