@@ -2,8 +2,16 @@
 #define SERVERCMNDS
 #include <pthread.h>
 #include "networking.h"
+#include "linkedlist.h"
 
-Commit** activecommits;
+
+typedef struct ProjectMeta {
+    char* project; 
+    Commit** activecommits;
+    int maxusers;
+} ProjectMeta;
+
+int projectCount;
 int currentuid;
 int maxusers;
 

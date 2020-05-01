@@ -48,8 +48,8 @@ void* threadentry(void* value) {
     return NULL;
 }
 
-void inturupthandler() {
-    
+void inturupthandler() {  
+	if (serveractive == 0) exit(0);
 	// Signal threads to stop, then join them 
 	serveractive = 0;
     int i = 0;
@@ -59,16 +59,6 @@ void inturupthandler() {
     for ( i = 0; i < THREAD_POOL_SIZE; i++) {
         pthread_join(thread_pool[i], NULL);
     }
-
-	// expire all active commits
-	if (activecommits != NULL) {
-		int i = 0;
-		for (i = 0; i < maxusers; i++) {
-			if (activecommits[i] != NULL) free(activecommits[i]);
-		}
-		free(activecommits);
-	}
-
 
     write(1, "\n", 1);
     exit(0);
@@ -116,7 +106,8 @@ int main(int argc, char** argv) {
 		pthread_create(&thread_pool[i], NULL, threadentry, NULL);
 	}
 
-	activecommits = NULL;
+	// LLhead = NULL;
+	projectCount = 0;
 	currentuid = 0;
 	maxusers = 0;
 	
@@ -139,10 +130,10 @@ int main(int argc, char** argv) {
 
 		int* fd = malloc(sizeof(int));
 		*fd = clisockfd;
-        	pthread_mutex_lock(&queue_lock);
-       		pthread_cond_signal(&new_command);
+		pthread_mutex_lock(&queue_lock);
+		pthread_cond_signal(&new_command);
 		enqueue(fd);	
-        	pthread_mutex_unlock(&queue_lock);
+		pthread_mutex_unlock(&queue_lock);
 	
 	}
 

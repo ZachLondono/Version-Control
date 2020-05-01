@@ -5,34 +5,25 @@
 // will lock access to the repo for other threads, to eliminate race conditions.
 pthread_mutex_t repo_lock = PTHREAD_MUTEX_INITIALIZER;
 
-int checkActiveCommitsSize(int uid) {	// will make sure that a given uid exists in the active commits, and that the active commits has been initialized
-	if (uid >= maxusers || activecommits == NULL) {			
-		maxusers = uid + 10;
-		if (activecommits != NULL) {
-			Commit** upsized = realloc(activecommits, maxusers * sizeof(Commit*));	// will resize active commits if neccessary
-			if (!upsized) {
-				printf("Error: couldn't allocate\n");
-				return -1;
-			}
-			activecommits = upsized;
-		} else activecommits = malloc(maxusers * sizeof(Commit*));
-
-		if (!activecommits) return -1;
-
-		int i = 0;
-		for (i = 0; i < maxusers; i++) activecommits[i] = NULL;
-		return 0;
-	}
-	return 0;
-}
-
 int nextUID() {
-	while(1) {
-		if (checkActiveCommitsSize(++currentuid) < 0) return -1;
-		if (activecommits[currentuid] == NULL) break;
+
+	// check that curruid has not been already assigned to a client
+	Node* currnode = getHead();
+	currentuid++;
+	while (currnode) {
+		ProjectMeta* project = currnode->content;
+
+		if (project->maxusers <= currentuid || project->activecommits[currentuid] != NULL) {
+			currentuid++;
+			currnode = getHead();
+			continue;
+		}
+
+		currnode = currnode->next;
 	}
-	int uid = currentuid;
-	return uid;
+	
+
+	return currentuid;
 }
 
 int servercheckForLocalProj(char* projectname) {
@@ -341,6 +332,69 @@ int _filenet(NetworkCommand* command, int sockfd) {
 
 }
 
+ProjectMeta* getMetaData(char* project) {
+
+	Node* node = getHead();
+	while (node != NULL) {
+		if (strcmp(((ProjectMeta*)node->content)->project, project) == 0) break;
+		node = node->next;
+	}
+
+	if (node == NULL) {
+		ProjectMeta* newproj = malloc(sizeof(ProjectMeta));
+
+		int len = strlen(project) + 1;
+		newproj->project = malloc(strlen(project) + 1);
+		memset(newproj->project, '\0', len);
+		memcpy(newproj->project, project, len);
+
+		newproj->maxusers = 10;
+		newproj->activecommits = malloc(newproj->maxusers * sizeof(Commit*));
+		int i = 0;
+		for (i = 0; i < newproj->maxusers; i++) newproj->activecommits[i] = NULL;
+		insertNode(newproj);
+		return newproj;
+	} 
+
+	return (ProjectMeta*)node->content;
+
+}
+
+int entercommit(int uid, char* projectName, char* commitdata, int length) {
+
+	ProjectMeta* project = getMetaData(projectName);
+
+	if (uid >= project->maxusers) { 
+		Commit** upsized = realloc(project->activecommits, project->maxusers*2);
+		if (!upsized) {
+			printf("Error: couldn't malloc\n");
+			return -1;
+		}
+		project->activecommits = upsized;
+		int i = project->maxusers;
+		for (i = project->maxusers; i < project->maxusers*2; i++) {
+			project->activecommits[i] = NULL;
+		}
+		project->maxusers *= 2; 
+	}
+
+	Commit* commit = malloc(sizeof(Commit));
+	commit->filecontent = commitdata;
+	commit->filesize = length;
+	commit->uid = uid;
+	commit->entries = 0;
+	
+	int i = 0;
+	for(i = 0; i < length; i++) {
+		if (commitdata[i] == '\n') commit->entries += 1;
+	}
+
+	project->activecommits[uid] = commit;
+
+	return 0;
+
+}
+
 int clientcommit(NetworkCommand* command, int sockfd) {
 
 	command->type = filenet;
@@ -377,17 +431,25 @@ int clientcommit(NetworkCommand* command, int sockfd) {
 
 	printf("***********\nClient '%d' Commit\n%s***********\n", uid, commitfile->argv[1]);
 
-	if (checkActiveCommitsSize(uid) < 0) return -1;
-	if (activecommits[uid] != NULL) {
-		printf("Overwriting client '%d's previous commit\n", uid);
-		free(activecommits[uid]);
+	entercommit(uid, command->argv[0], commitfile->argv[1], commitfile->arglengths[1]);
+
+	Node* projdata = getHead();
+	printf("#####Active Commits#####\n");
+	while(projdata) {
+
+		ProjectMeta* meta = ((ProjectMeta*)projdata->content);
+
+		printf("%s ->\n", meta->project);
+		int i = 0;
+		for (i = 0; i < meta->maxusers; i++) {
+			if(meta->activecommits[i])
+				printf("	%d\n", i);
+		}
+
+		projdata = projdata->next;
+
 	}
-	
-	Commit* commit = malloc(sizeof(Commit));
-	commit->uid = uid;
-	commit->filecontent = commitfile->argv[1];
-	commit->filesize = commitfile->arglengths[1];
-	activecommits[uid] = commit;
+	printf("########################\n");
 
 	freeCMND(commitfile);
 
