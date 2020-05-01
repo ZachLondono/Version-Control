@@ -3,6 +3,10 @@
 #include <pthread.h>
 #include "networking.h"
 
+Commit** activecommits;
+int currentuid;
+int maxusers;
+
 int servercheckForLocalProj(char* projectname);
 FileContents* serverreadfile(char* name);
 ssize_t serverwrite(int fd, char* buff, size_t count);

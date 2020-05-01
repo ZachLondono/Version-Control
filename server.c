@@ -49,7 +49,9 @@ void* threadentry(void* value) {
 }
 
 void inturupthandler() {
-    serveractive = 0;
+    
+	// Signal threads to stop, then join them 
+	serveractive = 0;
     int i = 0;
     for ( i = 0; i < THREAD_POOL_SIZE; i++) {
         pthread_cond_signal(&new_command);
@@ -57,6 +59,17 @@ void inturupthandler() {
     for ( i = 0; i < THREAD_POOL_SIZE; i++) {
         pthread_join(thread_pool[i], NULL);
     }
+
+	// expire all active commits
+	if (activecommits != NULL) {
+		int i = 0;
+		for (i = 0; i < maxusers; i++) {
+			if (activecommits[i] != NULL) free(activecommits[i]);
+		}
+		free(activecommits);
+	}
+
+
     write(1, "\n", 1);
     exit(0);
 }
@@ -102,6 +115,11 @@ int main(int argc, char** argv) {
 	for(i = 0; i < THREAD_POOL_SIZE; i++) {
 		pthread_create(&thread_pool[i], NULL, threadentry, NULL);
 	}
+
+	activecommits = NULL;
+	currentuid = 0;
+	maxusers = 0;
+	
     if(signal(SIGINT, inturupthandler) == SIG_ERR) {
         printf("Error: couldn't set handler for inturupt signal,\n");
         return -1;

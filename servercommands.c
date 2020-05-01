@@ -5,10 +5,6 @@
 // will lock access to the repo for other threads, to eliminate race conditions.
 pthread_mutex_t repo_lock = PTHREAD_MUTEX_INITIALIZER;
 
-Commit** activecommits = NULL;
-int currentuid = 0;
-int maxusers = 0;
-
 int checkActiveCommitsSize(int uid) {	// will make sure that a given uid exists in the active commits, and that the active commits has been initialized
 	if (uid >= maxusers || activecommits == NULL) {			
 		maxusers = uid + 10;
@@ -354,7 +350,7 @@ int clientcommit(NetworkCommand* command, int sockfd) {
 		printf("Failed to send server Manifest to client\n");
 		return -1;
 	}
-
+	command->argc = 4;
 	NetworkCommand* commitfile = readMessage(sockfd);
 
 	if (commitfile->type == responsenet) {
@@ -387,7 +383,7 @@ int clientcommit(NetworkCommand* command, int sockfd) {
 		free(activecommits[uid]);
 	}
 	
-	Commit* commit = malloc(sizeof(Commit*));
+	Commit* commit = malloc(sizeof(Commit));
 	commit->uid = uid;
 	commit->filecontent = commitfile->argv[1];
 	commit->filesize = commitfile->arglengths[1];
@@ -405,18 +401,6 @@ int clientcommit(NetworkCommand* command, int sockfd) {
 	return 0;
 
 }
-
-// int _data(NetworkCommand* command, int sockfd) {
-
-// 	char* name = malloc(5);
-// 	memset(name, '\0', 5);
-// 	memcpy(name, "data", 5);
-
-// 	if (!checkcommand(command, 2, name, sockfd, 1)) return -1;
-
-// 	//command->argv[1] contains a tar.gz with file to be copied into the server
-
-// }
 
 int executecommand(NetworkCommand* command, int sockfd) {
 
