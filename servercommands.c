@@ -14,7 +14,7 @@ int nextUID() {
 		maxusers = 10;
 		activecommits = malloc(maxusers * sizeof(Commit*));
 	}
-	if (currentuid == currentuid) {			// resize commit array 
+	if (currentuid >= maxusers) {			// resize commit array 
 		maxusers *= 2;
 		Commit** upsized = realloc(activecommits, maxusers * sizeof(Commit*));
 		if (!upsized) {
@@ -369,6 +369,7 @@ int clientcommit(NetworkCommand* command, int sockfd) {
 
 	printf("***********\nClient '%d' Commit\n%s***********\n", uid, commitfile->argv[1]);
 
+	if (activecommits == NULL) activecommits = malloc(uid * sizeof(Commit*));
 	if (activecommits[uid] != NULL) {
 		printf("Overwriting client '%d's previous commit\n", uid);
 		free(activecommits[uid]);
