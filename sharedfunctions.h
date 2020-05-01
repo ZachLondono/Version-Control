@@ -53,6 +53,7 @@ int uncompressfile(char* compressedpath);
 Manifest* parseManifest(FileContents* filecontent);
 char** getManifestFiles(Manifest* manifest);
 char** getManifestHashcodes(Manifest* manifest);
+int* getManifestFileVersion(Manifest* manifest);
 void freeManifest(Manifest* manifest);
 void freeCommit(Commit* commit);
 

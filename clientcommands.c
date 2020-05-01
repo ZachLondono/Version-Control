@@ -295,18 +295,21 @@ int _commit(ClientCommand* command) {
 
     if (checkresponse("file", response) < 0) return -1;
     
-    int checkfolder = 0;
-    DIR* dir = NULL;
-    if (!(dir = opendir(".tempfiles"))) checkfolder = mkdir(".tempfiles", 0700);
-    else closedir(dir);
-
-    if (checkfolder != 0) {
-        freeCMND(response);
-        return -1;
-    }
-
     Commit* commit = createcommit(response->argv[2], response->arglengths[2], command->args[0], projlen);
     freeCMND(response);
+    if(commit == NULL) {
+        printf("Error: couldn't create commit\n");
+        char* name = malloc(7);
+        memset(name, '\0', 7);
+        memcpy(name, "commit", 7);
+        char* reason = malloc(23);
+        memset(reason, '\0', 23);
+        memcpy(reason, "couldn't create commit", 23);
+        NetworkCommand* cancel = newFailureCMND(name, reason);
+        sendNetworkCommand(cancel, sockfd);
+        freeCMND(cancel);
+        return -1;        
+    }
 
     if (!commit) {
         char* name = malloc(7);
@@ -349,6 +352,13 @@ int _commit(ClientCommand* command) {
 
 Commit* createcommit(char* remoteManifest, int remotelen, char* project, int projlen) {
 
+    int checkfolder = 0;
+    DIR* dir = NULL;
+    if (!(dir = opendir(".tempfiles"))) checkfolder = mkdir(".tempfiles", 0700);
+    else closedir(dir);
+
+    if (checkfolder != 0) return NULL;
+
     chdir(".tempfiles");
     recreatefile("archive.tar.gz", remoteManifest, remotelen);
     uncompressfile("archive.tar.gz");
@@ -359,6 +369,9 @@ Commit* createcommit(char* remoteManifest, int remotelen, char* project, int pro
     sprintf(servermanifestpath, ".tempfiles/%s/.Manifest", project);
     FileContents* servermanifest = readfile(servermanifestpath);
     free(servermanifestpath);
+
+    close(servermanifest->fd);
+    system("rm -rf .tempfiles");
 
     char* localmanifestpath = malloc(11 + projlen);
     memset(localmanifestpath, '\0', 11 + projlen);
@@ -376,6 +389,7 @@ Commit* createcommit(char* remoteManifest, int remotelen, char* project, int pro
     Manifest* localmanifest = parseManifest(localmanifestfile);
     char** files = getManifestFiles(localmanifest);
     char** hashcodes = getManifestHashcodes(localmanifest);
+    int* fileversions = getManifestFileVersion(localmanifest);
 
     Manifest* remotemanifest = parseManifest(servermanifest);
     char** remotefiles = getManifestFiles(remotemanifest);
@@ -428,14 +442,14 @@ Commit* createcommit(char* remoteManifest, int remotelen, char* project, int pro
 
         if (new) {
             // Add condition
-            char* commitentry = malloc(strlen(files[i]) + 45);
-            memset(commitentry, '\0', strlen(files[i]) + 45);
+            char* commitentry = malloc(strlen(files[i]) + digitCount(fileversions[i]) + 47);
+            memset(commitentry, '\0', strlen(files[i]) + digitCount(fileversions[i]) + 47);
             sprintf(commitentry, "A %s", files[i]); 
             printf("%s\n", commitentry);
-            sprintf(commitentry, "A %s %s\n", files[i], hashcodes[i]);
+            sprintf(commitentry, "A %d %s %s\n",fileversions[i] + 1, files[i], hashcodes[i]);
             strcat(commit->filecontent, commitentry);
             free(commitentry);
-            commit->filesize += strlen(files[i]) + 45;
+            commit->filesize += strlen(files[i]) + digitCount(fileversions[i]) + 47;
             commit->entries += 1;
         } else {
             // file is already in remote, check that is up to date with live file
@@ -451,14 +465,14 @@ Commit* createcommit(char* remoteManifest, int remotelen, char* project, int pro
                 }
 
                 // Modify condition
-                char* commitentry = malloc(strlen(files[i]) + 45);
-                memset(commitentry, '\0', strlen(files[i]) + 45);
+                char* commitentry = malloc(strlen(files[i]) + digitCount(fileversions[i]) + 47);
+                memset(commitentry, '\0', strlen(files[i]) + digitCount(fileversions[i]) + 47);
                 sprintf(commitentry, "M %s", files[i]); 
                 printf("%s\n", commitentry);
-                sprintf(commitentry, "M %s %s\n", files[i], hashcodes[i]); 
+                sprintf(commitentry, "M %d %s %s\n", fileversions[i], files[i], hashcodes[i]); 
                 strcat(commit->filecontent, commitentry);
                 free(commitentry);
-                commit->filesize  += strlen(files[i]) + 45;
+                commit->filesize  += strlen(files[i]) + digitCount(fileversions[i]) + 47;
                 commit->entries += 1;
             }
             freefile(livecontent);
@@ -478,11 +492,11 @@ Commit* createcommit(char* remoteManifest, int remotelen, char* project, int pro
         
         if (removed) {
             // Delete condition
-            char* commitentry = malloc(strlen(remotefiles[i]) + 45);
-            memset(commitentry, '\0', strlen(remotefiles[i]) + 45);
+            char* commitentry = malloc(strlen(remotefiles[i]) + 48);
+            memset(commitentry, '\0', strlen(remotefiles[i]) + 48);
             sprintf(commitentry, "D %s", remotefiles[i]); 
             printf("%s\n", commitentry);
-            sprintf(commitentry, "D %s %s\n", remotefiles[i], remotehashcodes[i]); 
+            sprintf(commitentry, "D 0 %s %s\n", remotefiles[i], remotehashcodes[i]); 
             strcat(commit->filecontent, commitentry);
             free(commitentry);
             commit->filesize += strlen(remotefiles[i]) + 45;

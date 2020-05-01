@@ -346,6 +346,30 @@ char** getManifestHashcodes(Manifest* manifest) {
 
 }
 
+int* getManifestFileVersion(Manifest* manifest) {
+
+    if (manifest->entrycount == 0) return NULL;
+
+    int* fileversions = malloc(sizeof(int) * manifest->entrycount);
+
+    int i = 0;
+    for (i = 0; i < manifest->entrycount; i++) {
+
+        char* entry = malloc(strlen(manifest->entries[i]) + 1);
+        memset(entry, '\0', strlen(manifest->entries[i] + 1));
+        memcpy(entry, manifest->entries[i], strlen(manifest->entries[i]) + 1);
+
+        char* version = strtok(entry, " ");
+        fileversions[i] = atoi(version);
+
+        free(entry);
+
+    }
+
+    return fileversions;
+
+}
+
 void freeManifest(Manifest* manifest) {
 
     int i = 0;
