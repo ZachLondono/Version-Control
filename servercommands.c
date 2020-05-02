@@ -429,29 +429,29 @@ int clientcommit(NetworkCommand* command, int sockfd) {
 		return -1;
 	}
 
-	printf("***********\nClient '%d' Commit\n%s***********\n", uid, commitfile->argv[1]);
+	// printf("***********\nClient '%d' Commit\n%s***********\n", uid, commitfile->argv[1]);
 
 	entercommit(uid, command->argv[0], commitfile->argv[1], commitfile->arglengths[1]);
 
-	Node* projdata = getHead();
-	printf("#####Active Commits#####\n");
-	while(projdata) {
+	// Node* projdata = getHead();
+	// printf("#####Active Commits#####\n");
+	// while(projdata) {
 
-		ProjectMeta* meta = ((ProjectMeta*)projdata->content);
+	// 	ProjectMeta* meta = ((ProjectMeta*)projdata->content);
 
-		printf("%s ->\n", meta->project);
-		int i = 0;
-		for (i = 0; i < meta->maxusers; i++) {
-			if(meta->activecommits[i])
-				printf("	%d\n", i);
-		}
+	// 	printf("%s ->\n", meta->project);
+	// 	int i = 0;
+	// 	for (i = 0; i < meta->maxusers; i++) {
+	// 		if(meta->activecommits[i])
+	// 			printf("	%d\n", i);
+	// 	}
 
-		projdata = projdata->next;
+	// 	projdata = projdata->next;
 
-	}
-	printf("########################\n");
+	// }
+	// printf("########################\n");
 
-	freeCMND(commitfile);
+	// freeCMND(commitfile);
 
 	char* reason = malloc(6);
 	memset(reason,'\0', 6);
@@ -459,6 +459,90 @@ int clientcommit(NetworkCommand* command, int sockfd) {
 	NetworkCommand* response = newSuccessCMND(name, reason);
 	sendNetworkCommand(response, sockfd);
 	freeCMND(response);
+
+	return 0;
+
+}
+
+int clientpush(NetworkCommand* command, int sockfd) {
+
+	// arg0 - proj name,  arg1 - uid,  arg2 - commitfilehash
+	char* name = malloc(5);
+	memset(name, '\0', 5);
+	memcpy(name, "push", 5);
+
+	if (!checkcommand(command, 3, name, sockfd, 1)) return -1;
+	
+	char* clienthash = command->argv[2];
+	int clientuid = atoi(command->argv[1]);
+	char* project = command->argv[0];
+
+	Node* metaData = getHead();
+	while(metaData) {
+		if (strcmp(((ProjectMeta*)metaData->content)->project, project)==0) break;
+		metaData = metaData->next;
+	}
+
+	if (metaData == NULL) {		// project does not have any commits
+		// Send error message
+		char* reason = malloc(28);
+		memset(reason, '\0', 28);
+		memcpy(reason, "There are no active commits", 28);
+		NetworkCommand* nocommits = newFailureCMND(name, reason);
+		sendNetworkCommand(nocommits, sockfd);
+		freeCMND(nocommits);
+		return -1;
+	}
+
+	Commit* commit = ((ProjectMeta*)metaData->content)->activecommits[clientuid];
+
+	if (!commit) {				// client doesn't have any commits
+		// Send error message
+		char* reason = malloc(44);
+		memset(reason, '\0', 44);
+		memcpy(reason, "You have no active commits for this project", 44);
+		NetworkCommand* nocommits = newFailureCMND(name, reason);
+		sendNetworkCommand(nocommits, sockfd);
+		freeCMND(nocommits);
+		return -1;
+	}
+
+	unsigned char* hash = hashdata((unsigned char*)commit->filecontent, commit->filesize);
+	char* encoded_hash = hashtohex(hash);
+
+	int fd = open(".Commit", O_RDWR | O_CREAT, S_IRWXU);
+	write(fd, commit->filecontent, commit->filesize);
+
+	if (strcmp(clienthash, encoded_hash) != 0) {		// client's commit does not match
+		// Send error message
+		char* reason = malloc(24);
+		memset(reason, '\0', 24);
+		memcpy(reason, "Recieved invalid commit", 24);
+		NetworkCommand* nocommits = newFailureCMND(name, reason);
+		sendNetworkCommand(nocommits, sockfd);
+		freeCMND(nocommits);
+		return -1;
+	}
+
+	// Send success message to client
+	char* reason = malloc(4);
+	memset(reason, '\0', 4);
+	memcpy(reason, "202", 4);
+	NetworkCommand* requestfiles = newSuccessCMND(name, reason);
+	sendNetworkCommand(requestfiles, sockfd);
+	freeCMND(requestfiles);
+
+	NetworkCommand* files = readMessage(sockfd);
+
+	recreatefile("archive.tar.gz", files->argv[1], files->arglengths[1]);
+	uncompressfile("archive.tar.gz");
+
+	// Send success message to client
+	reason = malloc(4);
+	memcpy(reason, "202", 4);
+	NetworkCommand* success = newSuccessCMND(name, reason);
+	sendNetworkCommand(success, sockfd);
+	freeCMND(success);
 
 	return 0;
 
@@ -488,9 +572,9 @@ int executecommand(NetworkCommand* command, int sockfd) {
 		case commitnet:
 			return clientcommit(command, sockfd);
 			break;
-		// case data:
-		// 	return _data(command, sockfd);
-		// 	break;
+		case pushnet:
+			return clientpush(command, sockfd);
+			break;
 		default:
 			return -1;
 			break;
