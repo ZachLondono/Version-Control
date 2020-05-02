@@ -219,7 +219,276 @@ int _checkout(ClientCommand* command) {
 
 int _update(ClientCommand* command) {
     printf("update not implimented\n");
-    return -1;
+
+    if (!checkForLocalProj(command->args[0])) {
+        printf("Error: Local project does not exist. Checkout project from server or create a new one.\n");
+        return -1;
+    }
+
+    int projlen = strlen(command->args[0]);
+
+    char* manifestpath = ".Manifest";
+    NetworkCommand* request = newfilerequest(command->args[0], &manifestpath, 1);
+    request->type = updatenet;          // Network request for update?
+
+    int sockfd = connectwithconfig();
+    if (sockfd < 0) {
+        freeCMND(request);
+        return sockfd;
+    }
+
+    sendNetworkCommand(request, sockfd);
+    freeCMND(request);
+
+    NetworkCommand* response = readMessage(sockfd);
+    close(sockfd);
+
+    if (checkresponse("file", response) < 0) return -1;
+
+int checkfolder = 0;
+    DIR* dir = NULL;
+    if (!(dir = opendir(".tempfiles"))) checkfolder = mkdir(".tempfiles", 0700);
+    else closedir(dir);
+
+    if (checkfolder != 0) {
+        freeCMND(response);
+        return -1;
+    }
+
+    chdir(".tempfiles");
+    recreatefile("archive.tar.gz", response->argv[2], response->arglengths[2]);
+    uncompressfile("archive.tar.gz");
+    chdir("..");
+
+    freeCMND(response); 
+
+    char* servermanifestpath = malloc(23 + projlen);
+    memset(servermanifestpath, '\0', 23 + projlen);
+    sprintf(servermanifestpath, ".tempfiles/%s/.Manifest", command->args[0]);
+    FileContents* servermanifest = readfile(servermanifestpath);
+    free(servermanifestpath);
+
+    char* localmanifestpath = malloc(11 + projlen);
+    memset(localmanifestpath, '\0', 11 + projlen);
+    sprintf(localmanifestpath, "%s/.Manifest", command->args[0]);
+    FileContents* localmanifestfile = readfile(localmanifestpath);
+    free(localmanifestpath);
+
+    // Full success: .Manifest server/client same version
+    // Create empty .Update
+    if (getManifestVersion(servermanifest) == getManifestVersion(localmanifestfile)) {
+        int fd_update = open("./.Update", O_RDWR | O_CREAT, S_IWUSR | S_IRUSR);
+        if (fd_update == -1) {
+            printf("Error: couldn't create .Update file\n");
+            return -1;
+        }
+        printf("Up To Date\n");
+        freefile(localmanifestfile);
+        freefile(servermanifest);
+        return 0;
+    }
+
+    Manifest* localmanifest = parseManifest(localmanifestfile);
+    char** files = getManifestFiles(localmanifest);
+    char** hashcodes = getManifestHashcodes(localmanifest);
+
+    Manifest* remotemanifest = parseManifest(servermanifest);
+    char** remotefiles = getManifestFiles(remotemanifest);
+    char** remotehashcodes = getManifestHashcodes(remotemanifest);
+
+    char* update = malloc(servermanifest->size);
+    memset(update, '\0', servermanifest->size);
+    int updatelen = 0;
+
+    freefile(localmanifestfile);
+    freefile(servermanifest);
+
+    /* 
+        Success:
+        manifest version
+        localver == serverver
+
+        Failure: 
+        manifest version
+        localver != serverver
+        1) localhash != serverhash
+        2) livehash != localhash
+
+        Partial Success:
+        manifest version
+        localver != serverver
+
+        Modify
+        1) livehash == localhash
+        2) localhash != serverhash
+
+        Add
+        1) file is not in localmanifest 
+        2) file is in remotemanifest
+
+        Remove
+        1) file is in localmanifest
+        2) file is not in remotemanifest
+    */
+
+    // Assumed: .Manifest of server/client are different versions
+    int isconflict = 0;
+    int i = 0;
+    for(i = 0; i < remotemanifest->entrycount; i++) {                    // Check if server added/modified any files
+
+        int j = 0;
+        int new = 1;
+        for (j = 0; j < localmanifest->entrycount; j++) {
+            if (strcmp(remotefiles[i], files[j]) != 0) continue;        // file is included in client manifest
+            new = 0;
+            break;
+        }
+
+        if (new) {
+            // Add condition: Remote has file, Local does not
+            char* updateentry = malloc(strlen(remotefiles[i]) + 45);
+            memset(updateentry, '\0', strlen(remotefiles[i]) + 45);
+            sprintf(updateentry, "A %s", remotefiles[i]); 
+            printf("%s\n", updateentry);
+            sprintf(updateentry, "A %s %s\n", remotefiles[i], hashcodes[i]);
+            strcat(update, updateentry);
+            free(updateentry);
+            updatelen += strlen(remotefiles[i]) + 45;
+        } else {
+            // File is in both Remote and Local
+            // Check if Local is up to date with live file
+            FileContents* livecontent = readfile(files[i]);
+            unsigned char* livehashcode = hashdata((unsigned char*) livecontent->content, livecontent->size);
+
+            // Failure condition
+            if (strcmp((const char*)livehashcode, (const char*) hashcodes[i]) != 0) {
+                isconflict = 1;
+                // Updateentry needs to be live hash
+                char* updateentry = malloc(strlen(files[i]) + 45);
+                memset(updateentry, '\0', strlen(files[i]) + 45);
+                sprintf(updateentry, "C %s", files[i]); 
+                printf("%s\n", updateentry);
+                sprintf(updateentry, "C %s %s\n", files[i], livehashcode);
+                strcat(update, updateentry);
+                free(updateentry);
+                updatelen += strlen(files[i]) + 45;
+                freefile(livecontent);
+                free(livehashcode);
+            }
+
+            // Modify condition
+            else if(strcmp((const char*)livehashcode, (const char*) hashcodes[i]) == 0){
+                char* updateentry = malloc(strlen(files[i]) + 45);
+                memset(updateentry, '\0', strlen(files[i]) + 45);
+                sprintf(updateentry, "M %s", files[i]); 
+                printf("%s\n", updateentry);
+                sprintf(updateentry, "M %s %s\n", files[i], hashcodes[i]); 
+                strcat(update, updateentry);
+                free(updateentry);
+                updatelen += strlen(files[i]) + 45;
+            }
+            freefile(livecontent);
+        }
+
+    }
+
+    for(i = 0; i < localmanifest->entrycount; i++) {               // check if server removed any files
+        
+        int j = 0;
+        int removed = 1;
+        for (j = 0; j < remotemanifest->entrycount; j++) {
+            if (strcmp(remotefiles[j], files[i]) != 0) continue;
+            removed = 0;
+            break;
+        }
+        
+        if (removed) {
+            // Delete condition
+            char* updateentry = malloc(strlen(files[i]) + 45);
+            memset(updateentry, '\0', strlen(files[i]) + 45);
+            sprintf(updateentry, "D %s", files[i]); 
+            printf("%s\n", updateentry);
+            sprintf(updateentry, "D %s %s\n", files[i], hashcodes[i]); 
+            strcat(update, updateentry);
+            free(updateentry);
+            updatelen += strlen(files[i]) + 45;
+        }
+
+    }            
+
+    for (i = 0; i < localmanifest->entrycount; i++) {
+        free(files[i]);
+        free(hashcodes[i]);
+    }
+    for (i = 0; i < remotemanifest->entrycount; i++) {
+        free(remotefiles[i]);
+        free(remotehashcodes[i]);
+    }
+    free(files);
+    free(hashcodes);
+    free(remotefiles);
+    free(remotehashcodes);
+
+    freeManifest(remotemanifest);
+    freeManifest(localmanifest);
+
+
+    if(isconflict) {
+        char* updatepath = malloc(11 + projlen);
+        memset(updatepath, '\0', 11 + projlen);
+        sprintf(updatepath, "%s/.Conflict", command->args[0]);
+
+        int fd = open(updatepath, O_RDWR | O_CREAT, S_IRWXU);
+        if (fd < 0) {
+            printf("Error: Could not open or create update file. Make sure file permissions have not been changed\n");
+            close(fd);
+            free(updatepath);
+            return -1; 
+        }
+        free(updatepath);   
+    }
+    else {
+        char* updatepath = malloc(9 + projlen);
+        memset(updatepath, '\0', 9 + projlen);
+        sprintf(updatepath, "%s/.Update", command->args[0]);
+
+        int fd = open(updatepath, O_RDWR | O_CREAT, S_IRWXU);
+        if (fd < 0) {
+            printf("Error: Could not open or create update file. Make sure file permissions have not been changed\n");
+            close(fd);
+            free(updatepath);
+            return -1; 
+        }
+        free(updatepath);
+    }
+
+
+    // if (updatelen == '\0') {
+    //     printf("There are no changes to update. The local files are all up to date.\n");
+    //     close(fd);
+    //     free(update);
+    //     return -1;
+    // }
+
+    write(fd, update, updatelen - 1);      // TODO MAKE SURE ALL BYTES ARE WRITTEN TO FILE
+    close(fd);
+
+    // NetworkCommand* toSend = newDataTransferCmnd(command->args[0], update, updatelen - 1);      // Send update file to server
+    // sendNetworkCommand(toSend, sockfd);
+    // freeCMND(toSend);
+    // free(update);
+    
+
+    // NetworkCommand* finalresponse = readMessage(sockfd);                         // check that server recieved update successfully
+    // if (checkresponse("data", finalresponse) != 0)  {
+    //     printf("Error: server couldn't read update file\n");
+    //     return -1;
+    // }
+
+    // printf("Successfully update changes\n");
+    // freeCMND(finalresponse);
+
+    return 0;
 }
 
 int _upgrade(ClientCommand* command) {
