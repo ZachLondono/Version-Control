@@ -32,6 +32,8 @@ typedef struct _Commit {
     int uid;
 } Commit;
 
+typedef enum modtag {Add, Modify, Delete} ModTag;
+
 int checkForLocalProj(char* projname);
 char* bin2hex(const unsigned char *bin, size_t len);
 int hexchr2bin(const char hex, char* out);
@@ -54,6 +56,9 @@ Manifest* parseManifest(FileContents* filecontent);
 char** getManifestFiles(Manifest* manifest);
 char** getManifestHashcodes(Manifest* manifest);
 int* getManifestFileVersion(Manifest* manifest);
+Commit* parseCommit(FileContents* filecontent);
+char** getCommitFilePaths(Commit* commit);
+ModTag* getModificationTags(Commit* commit);
 void freeManifest(Manifest* manifest);
 void freeCommit(Commit* commit);
 

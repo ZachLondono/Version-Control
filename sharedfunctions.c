@@ -43,7 +43,6 @@ FileContents* readfile(char* name) {
     int status = 0;
     int bytesread = 0;
     while ((status = read(fd, &buffer[bytesread], size - bytesread)) != 0) bytesread += status;
-    // close(fd);
 
     FileContents* file = malloc(sizeof(FileContents));
     file->content = buffer;
@@ -181,6 +180,7 @@ int createcompressedarchive(char* filepath, int pathlen) {
     char* tarcmnd = malloc(cmndlen);
 	memset(tarcmnd,'\0', cmndlen);
 	snprintf(tarcmnd, cmndlen, "tar -czf archive.tar.gz %s", filepath);
+    printf("%s\n", tarcmnd);
 	if (system(tarcmnd) != 0) {
         printf("tar command failed\n");
         return -1;
@@ -369,6 +369,96 @@ int* getManifestFileVersion(Manifest* manifest) {
     return fileversions;
 
 }
+
+Commit* parseCommit(FileContents* filecontent) {
+
+    int entries = 0;
+
+    int i = 0;
+    for (i = 0; i < filecontent->size; i++)
+        if (filecontent->content[i] == '\n') if (filecontent->content[i-1] != '\n') entries++;
+
+    Commit* commit = malloc(sizeof(Commit));
+    commit->entries = entries;
+    commit->filesize = filecontent->size;
+    commit->filecontent = malloc(filecontent->size + 1);
+    memset(commit->filecontent, '\0', filecontent->size + 1);
+    memcpy(commit->filecontent, filecontent->content, filecontent->size);
+
+    return commit;
+
+}
+
+ModTag* getModificationTags(Commit* commit) {
+
+    if (commit->entries == 0) return NULL;
+
+    ModTag* tags = malloc(sizeof(ModTag) * commit->entries);
+
+    int i = 0;
+    for (i = 0; i < commit->entries; i++) {
+
+        char* content = malloc(commit->filesize + 1);
+        memset(content, '\0', commit->filesize + 1);
+        memcpy(content, commit->filecontent, commit->filesize);
+
+        int j = 0;
+        for (j = 0; j < i; j++) {
+            if (j == 0) strtok(content,"\n");
+            else strtok(NULL, "\n");
+        }
+
+        char* tag;
+        if (i == 0) tag = strtok(content, " ");
+        else tag = strtok(NULL, " ");
+    
+        if (tag[0] == 'A') tags[i] = Add;
+        else if (tag[0] == 'M') tags[i] = Modify;
+        else if (tag[0] == 'D') tags[i] = Delete;
+
+        free(content);
+
+    }
+    
+    return tags;
+
+} 
+
+char** getCommitFilePaths(Commit* commit) {
+
+    if (commit->entries == 0) return NULL;
+
+    char** paths = malloc(sizeof(char*) * commit->entries);
+
+    int i = 0;
+    for (i = 0; i < commit->entries; i++) {
+
+        char* content = malloc(commit->filesize + 1);
+        memset(content, '\0', commit->filesize + 1);
+        memcpy(content, commit->filecontent, commit->filesize);
+
+        int j = 0;
+        for (j = 0; j < i; j++) {
+            if (j == 0) strtok(content,"\n");
+            else strtok(NULL, "\n");
+        }
+
+        if (i == 0) strtok(content, " ");
+        else strtok(NULL, " ");
+        strtok(NULL, " ");
+        char* path = strtok(NULL, " ");
+
+        paths[i] = malloc(strlen(path) + 1);
+        memset(paths[i], '\0', strlen(path) + 1);
+        memcpy(paths[i], path, strlen(path) + 1);
+
+        free(content);
+         
+    }
+    
+    return paths;
+
+} 
 
 void freeManifest(Manifest* manifest) {
 
