@@ -119,6 +119,8 @@ NetworkCommand* readMessage(int sockfd) {
 		command->type = responsenet;
 	} else if (strcmp(commandname, "data") == 0) {
 		command->type = data;
+	} else if (strcmp(commandname, "push") == 0) {
+		command->type = pushnet;	
 	} else if (strcmp(commandname, "commit") == 0) {
 		command->type = commitnet;
 	} else {
@@ -266,6 +268,10 @@ int sendNetworkCommand(NetworkCommand* command, int sockfd) {
 			strcat(message, "commit");
 			msgindex += 6;
 			break;
+		case pushnet:
+			strcat(message, "push");
+			msgindex += 4;
+			break;
 		case data:
 			strcat(message, "data");
 			msgindex += 4;
@@ -305,12 +311,9 @@ int sendNetworkCommand(NetworkCommand* command, int sockfd) {
 		msgindex += command->arglengths[i];
 	}
 
-	
 	// network protocoll structure: <command>:<argument count>:<argument 1 length>:<argument 1><argument 2 length>:<argument 3> ...
 	// note: there is no deliminer between an argument's content and it's following argument's length
 	int ret = write(sockfd, message, messagelen);
-	printf(message);
-	printf("\n");
 	free(message);
 
 	return ret;
