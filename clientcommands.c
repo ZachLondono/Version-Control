@@ -324,7 +324,7 @@ int _commit(ClientCommand* command) {
         return -1;
     }
 
-    NetworkCommand* toSend = newDataTransferCmnd(command->args[0], commit->filecontent, commit->filesize - 1);      // Send commit file to server
+    NetworkCommand* toSend = newDataTransferCmnd(command->args[0], commit->filecontent, commit->filesize);      // Send commit file to server
     sendNetworkCommand(toSend, sockfd);
     freeCMND(toSend);
     
@@ -442,14 +442,14 @@ Commit* createcommit(char* remoteManifest, int remotelen, char* project, int pro
 
         if (new) {
             // Add condition
-            char* commitentry = malloc(strlen(files[i]) + digitCount(fileversions[i]) + 47);
-            memset(commitentry, '\0', strlen(files[i]) + digitCount(fileversions[i]) + 47);
+            char* commitentry = malloc(strlen(files[i]) + digitCount(fileversions[i]) + 40 + 6);
+            memset(commitentry, '\0', strlen(files[i]) + digitCount(fileversions[i]) + 40 + 6);
             sprintf(commitentry, "A %s", files[i]); 
             printf("%s\n", commitentry);
             sprintf(commitentry, "A %d %s %s\n",fileversions[i] + 1, files[i], hashcodes[i]);
             strcat(commit->filecontent, commitentry);
             free(commitentry);
-            commit->filesize += strlen(files[i]) + digitCount(fileversions[i]) + 47;
+            commit->filesize += strlen(files[i]) + digitCount(fileversions[i]) + 45;
             commit->entries += 1;
         } else {
             // file is already in remote, check that is up to date with live file
@@ -465,14 +465,14 @@ Commit* createcommit(char* remoteManifest, int remotelen, char* project, int pro
                 }
 
                 // Modify condition
-                char* commitentry = malloc(strlen(files[i]) + digitCount(fileversions[i]) + 47);
-                memset(commitentry, '\0', strlen(files[i]) + digitCount(fileversions[i]) + 47);
+                char* commitentry = malloc(strlen(files[i]) + digitCount(fileversions[i]) + 46);
+                memset(commitentry, '\0', strlen(files[i]) + digitCount(fileversions[i]) + 46);
                 sprintf(commitentry, "M %s", files[i]); 
                 printf("%s\n", commitentry);
                 sprintf(commitentry, "M %d %s %s\n", fileversions[i], files[i], hashcodes[i]); 
                 strcat(commit->filecontent, commitentry);
                 free(commitentry);
-                commit->filesize  += strlen(files[i]) + digitCount(fileversions[i]) + 47;
+                commit->filesize  += strlen(files[i]) + digitCount(fileversions[i]) + 45;
                 commit->entries += 1;
             }
             freefile(livecontent);
@@ -492,14 +492,14 @@ Commit* createcommit(char* remoteManifest, int remotelen, char* project, int pro
         
         if (removed) {
             // Delete condition
-            char* commitentry = malloc(strlen(remotefiles[i]) + 48);
-            memset(commitentry, '\0', strlen(remotefiles[i]) + 48);
+            char* commitentry = malloc(strlen(remotefiles[i]) + 40 + 2 + 4 + 1);
+            memset(commitentry, '\0', strlen(remotefiles[i]) + 40 + 2 + 4 + 1);
             sprintf(commitentry, "D %s", remotefiles[i]); 
             printf("%s\n", commitentry);
             sprintf(commitentry, "D 0 %s %s\n", remotefiles[i], remotehashcodes[i]); 
             strcat(commit->filecontent, commitentry);
             free(commitentry);
-            commit->filesize += strlen(remotefiles[i]) + 45;
+            commit->filesize += strlen(remotefiles[i]) + 40 + 2 + 4;
             commit->entries += 1;
         }
 
@@ -541,15 +541,107 @@ Commit* createcommit(char* remoteManifest, int remotelen, char* project, int pro
         return NULL;
     }
 
-    write(fd, commit->filecontent, commit->filesize - 2);      // TODO MAKE SURE ALL BYTES ARE WRITTEN TO FILE
+    write(fd, commit->filecontent, commit->filesize);      // TODO MAKE SURE ALL BYTES ARE WRITTEN TO FILE
     close(fd);
+
+    printf("%d\n",commit->filesize);
 
     return commit;
 
 }
 
 int _push(ClientCommand* command) {
-    printf("push not implimented\n");
+
+    // check that a .Commit exists
+    if (!checkForLocalProj(command->args[0])) {
+        printf("Error: Local project does not exist. Checkout project from server or create a new one.\n");
+        return -1;
+    }
+
+    char* commitpath = malloc(strlen(command->args[0]) + 9);
+    sprintf(commitpath, "%s/.Commit",command->args[0]);
+    FileContents* commit_file = readfile(commitpath);
+
+    Commit* commit = parseCommit(commit_file);
+
+    char** paths = getCommitFilePaths(commit);
+    ModTag* tags = getModificationTags(commit);
+
+    printf("Pushing Changes:\n");
+    int i = 0;
+    for(i = 0; i < commit->entries; i++) {
+        printf("%s\t%s\n", tags[i] == Add ? "Add" : tags[i] == Modify ? "Modifiy" : "Delete", paths[i]);
+    }
+
+    unsigned char* localhash = hashdata((unsigned char*) commit->filecontent, commit->filesize);
+    char* localencodedhash = hashtohex(localhash);
+    free(localhash);
+
+    NetworkCommand* request = malloc(sizeof(NetworkCommand));
+    request->type = pushnet;
+    request->argc = 3;
+    request->arglengths = malloc(3 * sizeof(int));
+    request->argv = malloc(3 * sizeof(char*));
+
+    request->arglengths[0] = strlen(command->args[0]);     // project name
+    request->argv[0] = malloc(request->arglengths[0]+1);
+    memset(request->argv[0], '\0', request->arglengths[0]);
+    memcpy(request->argv[0], command->args[0], request->arglengths[0]);
+
+    int uid = getUID();
+    request->arglengths[1] = digitCount(uid);     // uid
+    request->argv[1] = malloc(request->arglengths[1] + 1);
+    memset(request->argv[1], '\0', request->arglengths[1]);
+    sprintf(request->argv[1], "%d", uid);
+    
+    request->arglengths[2] = SHA_DIGEST_LENGTH * 2;     // commit hash
+    request->argv[2] = malloc(SHA_DIGEST_LENGTH * 2 + 1);
+    memset(request->argv[2], '\0', request->arglengths[2]);
+    memcpy(request->argv[2], localencodedhash, request->arglengths[2]);    
+
+    int sockfd = connectwithconfig();
+
+    sendNetworkCommand(request, sockfd);
+
+    NetworkCommand* responseA = readMessage(sockfd);
+
+    // check response is success
+    if(checkresponse("push", responseA) < 0) return -1;
+
+    int len = 1;
+    for (i = 0; i < commit->entries; i++) if (tags[i] != Delete) len += strlen(paths[i]) + 1;  
+
+    char* tarfiles = malloc(len);
+    memset(tarfiles,'\0',len + 1);
+    for (i = 0; i < commit->entries; i++) {
+        if (tags[i] != Delete) {
+            strcat(tarfiles, paths[i]);  
+            strcat(tarfiles, " ");
+        }
+    } 
+
+    int filesize = 0;
+    char* files = getcompressedfile(tarfiles, &filesize, open, read);
+
+    NetworkCommand* toSend = newDataTransferCmnd(command->args[0], files, filesize);      // Send commit file to server
+    sendNetworkCommand(toSend, sockfd);
+    freeCMND(toSend);
+
+    // // get all file paths from commit (except for ones marked delete)
+
+    // // tar all files, compress them
+
+    // // send file as a filenet command
+
+    NetworkCommand* responseB = readMessage(sockfd);
+
+    // check response is success
+    if(checkresponse("push", responseB) < 0) return -1;
+
+    // // chek that response is success
+
+    // // delete commit files
+
     return -1;
 }
 
