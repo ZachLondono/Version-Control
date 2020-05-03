@@ -255,11 +255,102 @@ int _destroynet(NetworkCommand* command, int sockfd) {
 int _rollbacknet(NetworkCommand* command, int sockfd) {
 	// arg[0] = project name, arg[1] = old version
 	char* name = malloc(9);
+	memset(name, '\0', 9);
 	memcpy(name, "rollback", 9);
-	char* reason = malloc(16);
-	memcpy(reason, "not implimented", 16);
-	NetworkCommand* response = newFailureCMND(name, reason);	
+
+	if (!checkcommand(command, 2, name, sockfd, 1)) return -1;
+
+	int newversion = atoi(command->argv[1]);
+
+	char archivepath[command->arglengths[0] + 10];
+	memset(archivepath, '\0', command->arglengths[0] + 10);
+	sprintf(archivepath, ".archive/%s", command->argv[0]);
+
+	DIR* archvedir = opendir(archivepath);
+	if (archvedir == NULL) {
+		printf("Error: Client requested a version of project '%s' that does not exist\n", command->argv[0]);
+		char* reason = malloc(50);
+		memset(reason, '\0', 50);
+		memcpy(reason, "Requested version for project does not exist", 50);
+		
+		NetworkCommand* response = newFailureCMND_B(name, reason, 50);
+		sendNetworkCommand(response, sockfd);
+		free(response);
+		return -1;
+	}
+
+	char* directoriestoremove[100];
+	int dircount = 0;
+	char* rollbacktar = NULL;
+
+	struct dirent* entry;
+	while((entry = readdir(archvedir))) {
+		printf("%s\n", entry->d_name);	
+		if (entry->d_type == DT_REG) {
+			if (strcmp(entry->d_name, "History") == 0 || strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
+			char* name = malloc(strlen(entry->d_name));
+			memset(name, '\0', strlen(entry->d_name));
+			memcpy(name, entry->d_name, strlen(entry->d_name));
+			char* version = strtok(name, "-");
+			if (!isNum(version, strlen(version))) continue;
+			if (atoi(version) > newversion) {
+				directoriestoremove[dircount] = malloc(strlen(entry->d_name) + 1);
+				memset(directoriestoremove[dircount], '\0',strlen(entry->d_name) + 1);
+				memcpy(directoriestoremove[dircount], entry->d_name,strlen(entry->d_name) + 1);
+				++dircount;
+			} else if (atoi(version) == newversion) {
+				printf("**%s\n", entry->d_name);
+				rollbacktar = malloc(strlen(entry->d_name) + 1);
+				memset(rollbacktar, '\0', strlen(entry->d_name));
+				memcpy(rollbacktar, entry->d_name, strlen(entry->d_name));
+			}
+			free(name);
+		}
+	}
+
+	if (!rollbacktar) {
+		printf("Error: Client requested a version of project '%s' that does not exist\n", command->argv[0]);
+		char* reason = malloc(50);
+		memset(reason, '\0', 50);
+		memcpy(reason, "Requested version for project does not exist", 50);
+		
+		NetworkCommand* response = newFailureCMND_B(name, reason, 50);
+		sendNetworkCommand(response, sockfd);
+		free(response);
+		return -1;
+	}	
+
+	char cmnd[strlen(command->argv[0]) + 9];
+	memset(cmnd, '\0', strlen(command->argv[0]) + 9);
+	// memcpy(olddir, command->argv[0], strlen(command->argv[0]) + 1);
+	sprintf(cmnd, "rm -rf %s", command->argv[0]);
+	
+	if (system(cmnd) < 0) {
+		printf("Error: There was an error removing old files in project %s, skipping... %s\n", command->argv[0], strerror(errno));
+	}
+
+	char* fullpath = malloc(strlen(archivepath) + strlen(rollbacktar) + 2);
+	memset(fullpath, '\0', strlen(archivepath) + strlen(rollbacktar) + 2);
+	sprintf(fullpath, "%s/%s", archivepath, rollbacktar);
+	rename(fullpath, "rollback");
+
+	uncompressfile("rollback");
+	char* reason = malloc(4);
+	memset(reason, '\0', 4);
+	memcpy(reason, "202", 4);
+
+	int i = 0;
+	for (i = 0; i < dircount; i++) {
+		char* full = malloc(strlen(archivepath) + strlen(directoriestoremove[i]) + 2);
+		memset(full, '\0', strlen(archivepath) + strlen(directoriestoremove[i]) + 2);
+		sprintf(full, "%s/%s", archivepath, directoriestoremove[i]);
+		remove(full);
+	}
+	
+	NetworkCommand* response = newSuccessCMND_B(name, reason, 4);
 	sendNetworkCommand(response, sockfd);
+	free(response);
+
 	return 0;
 }
 
@@ -286,6 +377,50 @@ int _versionnet(NetworkCommand* command, int sockfd) {
 	
 }
 
+int clienthistory(char* project, int sockfd) {
+
+	char* name = malloc(10);
+	memset(name, '\0', 10);
+	memcpy(name, "history", 7);
+	
+
+	if (!checkForLocalProj(project)) {
+		printf("Error: client requested project which doesn't exist or cant be opened\n");
+		char* reason = malloc(23);
+		memset(reason, '\0', 23);
+		memcpy(reason, "Project does not exist", 23);
+		
+		NetworkCommand* response = newFailureCMND_B(name, reason, 23);
+		sendNetworkCommand(response, sockfd);
+		free(response);
+		return -1;
+	}
+
+	char filepath[strlen(project) + 19];
+	memset(filepath, '\0', 19);
+	sprintf(filepath, ".archive/%s/History", project);
+
+	FileContents* history = readfile(filepath);
+	if (!history) {
+		char* reason = malloc(39);
+		memset(reason, '\0', 39);
+		memcpy(reason, "Projetc '%s' has had no files commited", 39);
+		
+		NetworkCommand* response = newFailureCMND_B(name, reason, 39);
+		sendNetworkCommand(response, sockfd);
+		free(response);
+		return -1;
+	}
+
+	NetworkCommand* response = newSuccessCMND_B(name, history->content, history->size);
+
+	sendNetworkCommand(response, sockfd);
+	freeCMND(response);
+
+	return 0;
+
+}
+
 int _filenet(NetworkCommand* command, int sockfd) {
 	// version  arg0- project name 		arg1- filecount   arg2- file1 name  arg3- file2 name ...
 	char* name = malloc(5);
@@ -294,7 +429,12 @@ int _filenet(NetworkCommand* command, int sockfd) {
 
 	int filecount = atoi(command->argv[1]);
 
+	if(filecount == 1 && strcmp(command->argv[2], "History") == 0) {
+		return clienthistory(command->argv[0], sockfd);
+	}
+
 	if (!checkcommand(command, filecount + 2, name, sockfd,1)) return -1;
+	
 
 	int totallen = 1;
 	char** fullpaths = malloc(filecount * sizeof(char*));	// full paths of all files 
@@ -366,14 +506,6 @@ int _filenet(NetworkCommand* command, int sockfd) {
 	}
 	free(fullpaths);
 	free(allpaths);
-
-	// int filepath_size = command->arglengths[0] + command->arglengths[1] + 2;
-	// char* filepath = malloc(filepath_size);
-	// snprintf(filepath, filepath_size, "%s/%s", command->argv[0], command->argv[1]);
-
-	// int filesize = 0;
-	// char* filecontents = getcompressedfile(filepath, &filesize);
-	// free(filepath);
 
 	NetworkCommand* response = newSuccessCMND_B(name, filecontents, filesize);
 
@@ -704,6 +836,14 @@ int clientpush(NetworkCommand* command, int sockfd) {
 
 }
 
+int clientupgrade(NetworkCommand* command, int sockfd) {
+	return -1;
+}
+
+int clientupdate(NetworkCommand* command, int sockfd) {
+	return -1;
+}
+
 int executecommand(NetworkCommand* command, int sockfd) {
 
 	switch (command->type){
@@ -730,6 +870,12 @@ int executecommand(NetworkCommand* command, int sockfd) {
 			break;
 		case pushnet:
 			return clientpush(command, sockfd);
+			break;
+		case updatenet:
+			return clientupdate(command, sockfd);
+			break;
+		case upgradenet:
+			return clientupdate(command, sockfd);
 			break;
 		default:
 			return -1;
