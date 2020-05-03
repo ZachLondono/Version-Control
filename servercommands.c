@@ -510,9 +510,6 @@ int clientpush(NetworkCommand* command, int sockfd) {
 	unsigned char* hash = hashdata((unsigned char*)commit->filecontent, commit->filesize);
 	char* encoded_hash = hashtohex(hash);
 
-	int fd = open(".Commit", O_RDWR | O_CREAT, S_IRWXU);
-	write(fd, commit->filecontent, commit->filesize);
-
 	if (strcmp(clienthash, encoded_hash) != 0) {		// client's commit does not match
 		// Send error message
 		char* reason = malloc(24);
@@ -523,7 +520,7 @@ int clientpush(NetworkCommand* command, int sockfd) {
 		freeCMND(nocommits);
 		return -1;
 	}
-
+	
 	// Send success message to client
 	char* reason = malloc(4);
 	memset(reason, '\0', 4);
@@ -532,10 +529,68 @@ int clientpush(NetworkCommand* command, int sockfd) {
 	sendNetworkCommand(requestfiles, sockfd);
 	freeCMND(requestfiles);
 
+	name = malloc(5);
+	memset(name, '\0', 5);
+	memcpy(name, "push", 5);
 	NetworkCommand* files = readMessage(sockfd);
 
+	pthread_mutex_lock(&repo_lock);
+
+	// Copy all clients files into server repo
 	recreatefile("archive.tar.gz", files->argv[1], files->arglengths[1]);
 	uncompressfile("archive.tar.gz");
+
+	// Delete all files deleted on client side
+	char** paths = getCommitFilePaths(commit);
+	char** hashes = getCommitHashes(commit);
+	ModTag* tags = getModificationTags(commit);
+	int* versions = getCommitVersions(commit);
+
+	int i = 0;
+	int addedcount = 0;
+	char* added[commit->entries];
+	// int removedcount = 0;
+	// char* removed[commit->entries];
+	int addedlen = 0; 
+	for (i = 0; i < commit->entries; i++) {
+		if (tags[i] == Add || tags[i] == Modify) {
+			int len = strlen(paths[i]) + digitCount(versions[i]) + 42;
+			addedlen += len;
+			added[addedcount] = malloc(len + 1);
+			sprintf(added[addedcount], "%d %s %s\n", versions[i], paths[i], hashes[i]);
+			++addedcount;
+		}
+	}
+
+	char manifestpath[strlen(project) + 11];
+	memset(manifestpath, '\0', strlen(project) + 11);
+	sprintf(manifestpath, "%s/.Manifest", project);
+	FileContents* manifestFile = readfile(manifestpath);
+
+	// create a char* with enough space for all current entries and new entries - deleted entries
+	char newmanifest[manifestFile->size + addedlen];
+	memset(newmanifest, '\0', manifestFile->size + addedlen);
+
+	int version = getManifestVersion(manifestFile);
+	char verstr[digitCount(version + 1) + 2];
+	sprintf(verstr, "%d\n", version + 1);
+	strcat(newmanifest, verstr);
+
+	for (i = 0; i < addedcount; i++) {
+		strcat(newmanifest, added[i]);
+	}
+
+	char tempmanifestpath[strlen(project) + 16];
+	memset(tempmanifestpath, '\0', strlen(project) + 16);
+	sprintf(tempmanifestpath, "%s/.temp.Manifest", project);
+	int fd = open(tempmanifestpath, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
+	write(fd, newmanifest, addedlen + strlen(verstr));
+
+	remove(manifestpath);
+
+	rename(tempmanifestpath, manifestpath);
+
+	pthread_mutex_unlock(&repo_lock);
 
 	// Send success message to client
 	reason = malloc(4);
@@ -543,6 +598,24 @@ int clientpush(NetworkCommand* command, int sockfd) {
 	NetworkCommand* success = newSuccessCMND(name, reason);
 	sendNetworkCommand(success, sockfd);
 	freeCMND(success);
+
+	Node* head = getHead();
+	while(head) {
+		if (strcmp(((ProjectMeta*) head->content)->project, project) == 0) break;
+		head = head->next;
+	}
+
+	if (head == NULL) return 0;
+
+	ProjectMeta* projmeta = (ProjectMeta*) head->content;
+	i = 0;
+	for (i = 0; i < projmeta->maxusers; i++) {
+		if (projmeta->activecommits[i]) {
+			printf("Expiring commit for user '%d' in '%s'\n", i, project);
+			free(projmeta->activecommits[i]);
+			projmeta->activecommits[i] = NULL;
+		}
+	}
 
 	return 0;
 
