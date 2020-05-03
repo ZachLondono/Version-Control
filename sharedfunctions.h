@@ -59,6 +59,8 @@ int* getManifestFileVersion(Manifest* manifest);
 Commit* parseCommit(FileContents* filecontent);
 char** getCommitFilePaths(Commit* commit);
 ModTag* getModificationTags(Commit* commit);
+int* getCommitVersions(Commit* commit);
+char** getCommitHashes(Commit* commit);
 void freeManifest(Manifest* manifest);
 void freeCommit(Commit* commit);
 

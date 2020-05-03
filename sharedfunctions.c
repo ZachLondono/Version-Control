@@ -193,8 +193,10 @@ char* getcompressedfile(char* filepath, int* deflated_size, int (*opencmnd)(cons
 
     int pathlen = strlen(filepath);
     if (createcompressedarchive(filepath, pathlen) < 0) return NULL;
-
-	int fd = opencmnd("archive.tar.gz", O_RDWR);
+    
+    int fd;
+	if (opencmnd != NULL) fd = opencmnd("archive.tar.gz", O_RDWR);
+    else fd = open("archive.tar.gz", O_RDWR);
 	if (fd < 0) {
 		printf("Error: couldn't read compressed data\n");
 		return NULL;
@@ -207,7 +209,8 @@ char* getcompressedfile(char* filepath, int* deflated_size, int (*opencmnd)(cons
 
 	char* deflated_content = malloc(size);
 	int readin = 0, status = 0;
-	while ((status = readcmnd(fd, &deflated_content[readin], size - readin)) > 0) readin += status;
+	if (readcmnd != NULL) while ((status = readcmnd(fd, &deflated_content[readin], size - readin)) > 0) readin += status;
+    else while ((status = read(fd, &deflated_content[readin], size - readin)) > 0) readin += status;
 
 	close(fd);
 
@@ -459,6 +462,80 @@ char** getCommitFilePaths(Commit* commit) {
     return paths;
 
 } 
+
+int* getCommitVersions(Commit* commit) {
+
+    if (commit->entries == 0) return NULL;
+
+    int* versions = malloc(sizeof(char*) * commit->entries);
+
+    int i = 0;
+    for (i = 0; i < commit->entries; i++) {
+
+        char* content = malloc(commit->filesize + 1);
+        memset(content, '\0', commit->filesize + 1);
+        memcpy(content, commit->filecontent, commit->filesize);
+
+        int j = 0;
+        for (j = 0; j < i; j++) {
+            if (j == 0) strtok(content,"\n");
+            else strtok(NULL, "\n");
+        }
+
+        if (i == 0) strtok(content, " ");
+        else strtok(NULL, " ");
+        
+        char* version = strtok(NULL, " ");
+        if (!isNum(version, strlen(version))) {
+            printf("Warning: error in commit file formatting\n");
+            continue;
+        }
+        versions[i] = atoi(version);
+
+        free(content);
+        
+    }
+
+    return versions;
+
+}
+
+char** getCommitHashes(Commit* commit) {
+
+    if (commit->entries == 0) return NULL;
+
+    char** hashes = malloc(sizeof(char*) * commit->entries);
+
+    int i = 0;
+    for (i = 0; i < commit->entries; i++) {
+
+        char* content = malloc(commit->filesize + 1);
+        memset(content, '\0', commit->filesize + 1);
+        memcpy(content, commit->filecontent, commit->filesize);
+
+        int j = 0;
+        for (j = 0; j < i; j++) {
+            if (j == 0) strtok(content,"\n");
+            else strtok(NULL, "\n");
+        }
+
+        if (i == 0) strtok(content, " ");
+        else strtok(NULL, " ");
+        strtok(NULL, " ");
+        strtok(NULL, " ");
+        char* hash = strtok(NULL, " ");
+
+        hashes[i] = malloc(strlen(hash) + 1);
+        memset(hashes[i], '\0', strlen(hash) + 1);
+        memcpy(hashes[i], hash, strlen(hash) + 1);
+
+        free(content);
+         
+    }
+    
+    return hashes;
+
+}
 
 void freeManifest(Manifest* manifest) {
 
