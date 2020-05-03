@@ -174,10 +174,28 @@ int _destroynet(NetworkCommand* command, int sockfd) {
 
 	if (!checkcommand(command, 1, name,sockfd,1)) return -1;
 
+	int checkfolder = 0;
+	char archivedirectory[10] = ".archive";
+    DIR* dir = NULL;
+    if ((dir = opendir(archivedirectory))) {
+		closedir(dir);
+		char backupdirectory[strlen(command->argv[0]) + 10];
+		sprintf(backupdirectory, ".archive/%s", command->argv[0]);
+		dir = NULL;
+		if (!(dir = opendir(backupdirectory))) checkfolder = -1; 
+		closedir(dir);
+	}
+
 	char* removecmnd = malloc(26 + command->arglengths[0]);
 	sprintf(removecmnd, "rm -r -f %s >/dev/null 2>&1", command->argv[0]);
+	
+	char* removecmnd2 = malloc(26 + command->arglengths[0] + 9);
+	sprintf(removecmnd2, "rm -r -f .archive/%s >/dev/null 2>&1", command->argv[0]);
+
+	int failed = 0;
 
 	pthread_mutex_lock(&repo_lock);
+
 	if (system(removecmnd) != 0) {
 		pthread_mutex_unlock(&repo_lock);
 		char* reason = malloc(25);
@@ -187,10 +205,44 @@ int _destroynet(NetworkCommand* command, int sockfd) {
 		sendNetworkCommand(response, sockfd);
 		freeCMND(response);
 		free(removecmnd);
-		return -1;
+		failed = 1;
 	}
+
+	if (checkfolder == 0) {
+		if (system(removecmnd2) != 0) {
+			pthread_mutex_unlock(&repo_lock);
+			char* reason = malloc(25);
+			memset(reason, '\0',25);
+			memcpy(reason, "couldn't destroy archive", 25);
+			NetworkCommand* response = newFailureCMND_B(name, reason, 25);
+			sendNetworkCommand(response, sockfd);
+			freeCMND(response);
+			free(removecmnd);
+			failed = 1;
+		}
+	}
+
+	Node* head = getHead();
+	while(head != NULL) {
+		if (strcmp(((ProjectMeta*) head->content)->project, command->argv[0]) == 0) break;
+		head = head->next;
+	}
+
+	if (head != NULL) {
+		ProjectMeta* projmeta = (ProjectMeta*) head->content;
+		int i = 0;
+		for (i = 0; i < projmeta->maxusers; i++) {
+			if (projmeta->activecommits[i]) {
+				printf("Expiring commit for user '%d' in '%s'\n", i, command->argv[0]);
+				free(projmeta->activecommits[i]);
+				projmeta->activecommits[i] = NULL;
+			}
+		}
+	}
+
 	pthread_mutex_unlock(&repo_lock);
 	free(removecmnd);
+	if (failed) return -1;
 
 	char* reason = malloc(22);
 	memset(reason, '\0', 22);
@@ -553,7 +605,7 @@ int clientpush(NetworkCommand* command, int sockfd) {
 	sprintf(backupdirectory, ".archive/%s", project);
 	int checkfolder2 = 0;
     dir = NULL;
-    if (!(dir = opendir(backupdirectory))) checkfolder = mkdir(backupdirectory, 0700);
+    if (!(dir = opendir(backupdirectory))) checkfolder2 = mkdir(backupdirectory, 0700);
     else closedir(dir);
 
 
@@ -562,6 +614,15 @@ int clientpush(NetworkCommand* command, int sockfd) {
 		char* archivename = malloc(archivenamelen);
 		sprintf(archivename, "%s/%d-%s", backupdirectory, version, project);
 		createcompressedfile(project, strlen(project), archivename, archivenamelen);
+
+		char historypath[strlen(project) + 7];
+		sprintf(historypath, ".archive/%s/History", project);
+		printf(historypath);
+		int fd = open(historypath, O_WRONLY | O_APPEND | O_CREAT, S_IRUSR | S_IWUSR);
+		if (fd > 0) {
+			write(fd, commit->filecontent, commit->filesize);
+		} else printf("Error: couldn't update history, skipping... %s\n", strerror(errno));
+		
 	} else printf("Error: couldn't backup current version, skipping...\n");
 
 	// Copy all clients files into server repo
