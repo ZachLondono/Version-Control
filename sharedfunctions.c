@@ -59,7 +59,10 @@ void freefile(FileContents* file) {
 
 int isNum(char* value, int len) {
     int i = 0;
-    for(i = 0; i < len; i++) if (!isdigit(value[i])) return 0;
+    for(i = 0; i < len; i++) {
+        if(i == 0 && value[i] == '-') continue;
+        if (!isdigit(value[i])) return 0;
+    }
     return 1;
 }
 
