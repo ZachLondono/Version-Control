@@ -536,6 +536,34 @@ int clientpush(NetworkCommand* command, int sockfd) {
 
 	pthread_mutex_lock(&repo_lock);
 
+	char manifestpath[strlen(project) + 11];
+	memset(manifestpath, '\0', strlen(project) + 11);
+	sprintf(manifestpath, "%s/.Manifest", project);
+	FileContents* manifestFile = readfile(manifestpath);
+	int version = getManifestVersion(manifestFile);
+
+
+	char archivedirectory[10] = ".archive";
+	int checkfolder = 0;
+    DIR* dir = NULL;
+    if (!(dir = opendir(archivedirectory))) checkfolder = mkdir(archivedirectory, 0700);
+    else closedir(dir);
+
+	char backupdirectory[strlen(project) + 10];
+	sprintf(backupdirectory, ".archive/%s", project);
+	int checkfolder2 = 0;
+    dir = NULL;
+    if (!(dir = opendir(backupdirectory))) checkfolder = mkdir(backupdirectory, 0700);
+    else closedir(dir);
+
+
+	if (checkfolder == 0 && checkfolder2 == 0) {
+		int archivenamelen = digitCount(version) + 2*strlen(project) + 12;
+		char* archivename = malloc(archivenamelen);
+		sprintf(archivename, "%s/%d-%s", backupdirectory, version, project);
+		createcompressedfile(project, strlen(project), archivename, archivenamelen);
+	} else printf("Error: couldn't backup current version, skipping...\n");
+
 	// Copy all clients files into server repo
 	recreatefile("archive.tar.gz", files->argv[1], files->arglengths[1]);
 	uncompressfile("archive.tar.gz");
@@ -562,16 +590,10 @@ int clientpush(NetworkCommand* command, int sockfd) {
 		}
 	}
 
-	char manifestpath[strlen(project) + 11];
-	memset(manifestpath, '\0', strlen(project) + 11);
-	sprintf(manifestpath, "%s/.Manifest", project);
-	FileContents* manifestFile = readfile(manifestpath);
-
 	// create a char* with enough space for all current entries and new entries - deleted entries
 	char newmanifest[manifestFile->size + addedlen];
 	memset(newmanifest, '\0', manifestFile->size + addedlen);
 
-	int version = getManifestVersion(manifestFile);
 	char verstr[digitCount(version + 1) + 2];
 	sprintf(verstr, "%d\n", version + 1);
 	strcat(newmanifest, verstr);
