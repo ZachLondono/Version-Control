@@ -123,6 +123,10 @@ NetworkCommand* readMessage(int sockfd) {
 		command->type = pushnet;	
 	} else if (strcmp(commandname, "commit") == 0) {
 		command->type = commitnet;
+	} else if (strcmp(commandname, "upgrade") == 0) {
+		command->type = upgradenet;
+	} else if (strcmp(commandname, "update") == 0) {
+		command->type = updatenet;
 	} else {
 		char* name = malloc(CMND_NAME_MAX + 1);
 		memset(name, '\0', CMND_NAME_MAX + 1);
@@ -275,6 +279,14 @@ int sendNetworkCommand(NetworkCommand* command, int sockfd) {
 		case data:
 			strcat(message, "data");
 			msgindex += 4;
+			break;
+		case updatenet:
+			strcat(message, "update");
+			msgindex += 6;
+			break;
+		case upgradenet:
+			strcat(message, "upgrade");
+			msgindex += 6;
 			break;
 		default:
 			free(message);
