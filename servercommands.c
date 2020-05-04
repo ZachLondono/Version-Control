@@ -563,7 +563,9 @@ int entercommit(int uid, char* projectName, char* commitdata, int length) {
 	}
 
 	Commit* commit = malloc(sizeof(Commit));
-	commit->filecontent = commitdata;
+	commit->filecontent = malloc(length + 1);
+	memset(commit->filecontent, '\0', length + 1);
+	memcpy(commit->filecontent, commitdata, length);
 	commit->filesize = length;
 	commit->uid = uid;
 	commit->entries = 0;
@@ -617,25 +619,7 @@ int clientcommit(NetworkCommand* command, int sockfd) {
 
 	entercommit(uid, command->argv[0], commitfile->argv[1], commitfile->arglengths[1]);
 
-	// Node* projdata = getHead();
-	// printf("#####Active Commits#####\n");
-	// while(projdata) {
-
-	// 	ProjectMeta* meta = ((ProjectMeta*)projdata->content);
-
-	// 	printf("%s ->\n", meta->project);
-	// 	int i = 0;
-	// 	for (i = 0; i < meta->maxusers; i++) {
-	// 		if(meta->activecommits[i])
-	// 			printf("	%d\n", i);
-	// 	}
-
-	// 	projdata = projdata->next;
-
-	// }
-	// printf("########################\n");
-
-	// freeCMND(commitfile);
+	freeCMND(commitfile);		//IF THIS LINE IS UNCOMMENTED, COMMIT IF INVALID
 
 	char* reason = malloc(6);
 	memset(reason,'\0', 6);
@@ -837,8 +821,11 @@ int clientpush(NetworkCommand* command, int sockfd) {
 }
 
 int clientupgrade(NetworkCommand* command, int sockfd) {
-	
-	
+	command->type = filenet;
+	if (_filenet(command, sockfd) < 0) {
+		printf("Failed to send server files to client\n");
+		return -1;
+	}
 	return -1;
 }
 
