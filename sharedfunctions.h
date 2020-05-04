@@ -32,6 +32,14 @@ typedef struct _Commit {
     int uid;
 } Commit;
 
+typedef struct _Update {
+    int uptodate;
+    int filesize;
+    int entries;
+    char* filecontent;
+    int uid;
+} Update;
+
 typedef enum modtag {Add, Modify, Delete} ModTag;
 
 int checkForLocalProj(char* projname);

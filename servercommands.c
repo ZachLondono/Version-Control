@@ -837,10 +837,17 @@ int clientpush(NetworkCommand* command, int sockfd) {
 }
 
 int clientupgrade(NetworkCommand* command, int sockfd) {
+	
+	
 	return -1;
 }
 
 int clientupdate(NetworkCommand* command, int sockfd) {
+	command->type = filenet;
+	if (_filenet(command, sockfd) < 0) {
+		printf("Failed to send server Manifest to client\n");
+		return -1;
+	}
 	return -1;
 }
 
