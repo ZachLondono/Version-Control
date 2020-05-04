@@ -286,7 +286,7 @@ int sendNetworkCommand(NetworkCommand* command, int sockfd) {
 			break;
 		case upgradenet:
 			strcat(message, "upgrade");
-			msgindex += 6;
+			msgindex += 7;
 			break;
 		default:
 			free(message);

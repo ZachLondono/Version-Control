@@ -58,6 +58,9 @@ int main(int argc, char** argv) {
     } else if (strcmp(command_text, "update") == 0) {
         command->type = update;
         cmnd_func = &_update;
+    } else if (strcmp(command_text, "upgrade") == 0) {
+        command->type = upgrade;
+        cmnd_func = &_upgrade;
     } else if (strcmp(command_text, "push") == 0) {
         command->type = push;
         cmnd_func = &_push;

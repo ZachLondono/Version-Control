@@ -530,7 +530,7 @@ char** getCommitHashes(Commit* commit) {
         else strtok(NULL, " ");
         strtok(NULL, " ");
         strtok(NULL, " ");
-        char* hash = strtok(NULL, " ");
+        char* hash = strtok(NULL, "\n");
 
         hashes[i] = malloc(strlen(hash) + 1);
         memset(hashes[i], '\0', strlen(hash) + 1);

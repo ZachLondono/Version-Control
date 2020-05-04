@@ -432,13 +432,13 @@ int _filenet(NetworkCommand* command, int sockfd) {
 	if(filecount == 1 && strcmp(command->argv[2], "History") == 0) {
 		return clienthistory(command->argv[0], sockfd);
 	}
-
-	if (!checkcommand(command, filecount + 2, name, sockfd,1)) return -1;
 	
+	if (!checkcommand(command, filecount + 2, name, sockfd,1)) return -1;
 
 	int totallen = 1;
 	char** fullpaths = malloc(filecount * sizeof(char*));	// full paths of all files 
 	int i = 0;
+
 	for (i = 0; i < filecount; i++) {
 		
 		int pathlen = command->arglengths[0] + command->arglengths[i+2] + 2;
@@ -478,7 +478,7 @@ int _filenet(NetworkCommand* command, int sockfd) {
 	char* allpaths = malloc(totallen);
 	memset(allpaths, '\0', totallen);
 	for (i = 0; i < filecount; i++) {
-		if (i != 0) strcat(allpaths, fullpaths[i]);
+		if (i != 0) strcat(allpaths, " ");
 		strcat(allpaths, fullpaths[i]);
 	}
 
@@ -759,7 +759,7 @@ int clientpush(NetworkCommand* command, int sockfd) {
 	int addedlen = 0; 
 	for (i = 0; i < commit->entries; i++) {
 		if (tags[i] == Add || tags[i] == Modify) {
-			int len = strlen(paths[i]) + digitCount(versions[i]) + 42;
+			int len = strlen(paths[i]) + digitCount(versions[i]) + 43;
 			addedlen += len;
 			added[addedcount] = malloc(len + 1);
 			sprintf(added[addedcount], "%d %s %s\n", versions[i], paths[i], hashes[i]);
@@ -821,12 +821,30 @@ int clientpush(NetworkCommand* command, int sockfd) {
 }
 
 int clientupgrade(NetworkCommand* command, int sockfd) {
-	command->type = filenet;
-	if (_filenet(command, sockfd) < 0) {
+
+	if (!checkcommand(command, 1, "upgrade", sockfd, 1)) return -1;
+
+	char* manpath = malloc(command->arglengths[0] + 11);
+	sprintf(manpath, "%s/.Manifest", command->argv[0]);
+
+	FileContents* file = readfile(manpath);
+	int version = getManifestVersion(file);
+	freefile(file);
+	free(manpath);
+
+	char* ver_s = malloc(digitCount(version) + 1);
+	sprintf(ver_s, "%d", version);
+	NetworkCommand* response = newSuccessCMND("upgrade", ver_s);
+	sendNetworkCommand(response, sockfd);
+
+	NetworkCommand* filereq = readMessage(sockfd);
+	filereq->type = filenet;
+	if (_filenet(filereq, sockfd) < 0) {
 		printf("Failed to send server files to client\n");
 		return -1;
 	}
-	return -1;
+
+	return 0;
 }
 
 int clientupdate(NetworkCommand* command, int sockfd) {
@@ -869,7 +887,7 @@ int executecommand(NetworkCommand* command, int sockfd) {
 			return clientupdate(command, sockfd);
 			break;
 		case upgradenet:
-			return clientupdate(command, sockfd);
+			return clientupgrade(command, sockfd);
 			break;
 		default:
 			return -1;

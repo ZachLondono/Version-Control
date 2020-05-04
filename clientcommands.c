@@ -270,7 +270,183 @@ int _update(ClientCommand* command) {
 }
 
 int _upgrade(ClientCommand* command) {
-    printf("upgrade not implimented\n");
+    
+    // proj dont exist
+    // server no contact
+    // yes .Conflict
+    // no .Commit
+
+    char* project = command->args[0];
+    int projlen = strlen(project);
+
+    if(!checkForLocalProj(project)) return -1;
+
+    char* conflictpath = malloc(projlen + 11);
+    memset(conflictpath, '\0', projlen + 11);
+    sprintf(conflictpath, "%s/.Conflict", project);
+    
+    char* updatepath = malloc(projlen + 9);
+    memset(updatepath, '\0', projlen + 9);
+    sprintf(updatepath, "%s/.Update", project);    
+
+    int fd = open(conflictpath, O_RDONLY);
+    if (fd > 0) {
+        printf("Error: Conflicts in project '%s' exist. Resolve conflict before attempting to upgrade.\n", command->args[0]);
+        free(conflictpath);
+        close(fd);
+        return -1;
+    }
+    close(fd);
+    free(conflictpath);
+
+    fd = open(updatepath, O_RDONLY);
+    if (fd < 0) {
+        printf("Error: Project '%s' has no pending updates. Update before attempting to upgrade.\n", command->args[0]);
+        free(updatepath);
+        return -1;
+    }
+    close(fd);
+
+
+    FileContents* file = readfile(updatepath);
+    Commit* update = parseCommit(file);
+    freefile(file);
+    char** files = getCommitFilePaths(update);
+    char** hashes = getCommitHashes(update);
+    int* versions = getCommitVersions(update);
+    ModTag* tags = getModificationTags(update);
+
+    int sockfd = connectwithconfig();
+    
+    NetworkCommand* requestversion = malloc(sizeof(NetworkCommand));
+    if (!requestversion) {
+        printf("no alloc %s", strerror(errno));
+        return -1;
+    }
+    requestversion->type = upgradenet;
+    requestversion->argc = 1;
+    requestversion->argv = malloc(sizeof(char*));
+    requestversion->arglengths = malloc(sizeof(int));
+    requestversion->arglengths[0] = strlen(project);
+    requestversion->argv[0] = malloc(requestversion->arglengths[0] + 1);
+    memset(requestversion->argv[0], '\0', requestversion->arglengths[0] + 1);
+    memcpy(requestversion->argv[0], project, requestversion->arglengths[0]);
+
+    sendNetworkCommand(requestversion, sockfd);
+
+    // Recieve files from server
+    NetworkCommand* responseversion = readMessage(sockfd);
+
+    if(checkresponse("upgrade", responseversion) < 0) return -1;
+
+    char* manifestpath = malloc(projlen + 11);
+    memset(manifestpath, '\0', projlen + 11);
+    sprintf(manifestpath, "%s/.Manifest", project);    
+
+    FileContents* manifestfile = readfile(manifestpath);
+    Manifest* manifest = parseManifest(manifestfile);
+    freefile(manifestfile);
+    char** fileslocal = getManifestFiles(manifest);
+
+    char* tempmanifestpath = malloc(projlen + 16);
+    memset(tempmanifestpath, '\0', projlen + 16);
+    sprintf(tempmanifestpath, "%s/.temp.Manifest", project);    
+
+    fd = open(tempmanifestpath, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
+
+    write(fd, responseversion->argv[2], responseversion->arglengths[2]);
+    write(fd, "\n", 1);
+
+    int i = 0;
+    int j = 0;
+    for (i = 0; i < manifest->entrycount; i++) {
+
+        int checked = 0;
+
+        for (j = 0; j < update->entries; j++) {
+            if (strcmp(fileslocal[i], files[j]) == 0) {
+                checked = 1;
+                if (tags[j] == Delete) {
+                    break;                  // skip, do not add to new .Manifest
+                }                                        
+                // Else its modify, replace manifest entry with update entry
+
+                int entrylen = digitCount(versions[j]) + 1 + strlen(files[j]) + 1 + 40 + 2;
+                char entry[entrylen];
+                snprintf(entry,  entrylen, "%d %s %s\n", versions[j], files[j], hashes[j]);
+                
+                write(fd, entry, entrylen - 1);
+
+            }
+        }
+
+        if (!checked) {
+            // file exists in manifest, not in .Update (local add)
+            write(fd, manifest->entries[i], strlen(manifest->entries[i]) - 1);
+            write(fd, "\n", 1);
+        }
+
+    }
+
+    for (i = 0; i < update->entries; i++) {
+        if (tags[i] != Add) continue;
+
+        int entrylen = digitCount(versions[i]) + 1 + strlen(files[i]) + 1 + 40 + 2;
+        char entry[entrylen];
+        snprintf(entry,  entrylen, "%d %s %s\n", versions[i], files[i], hashes[i]);
+        
+        write(fd, entry, entrylen - 1);
+
+    }
+
+    close(fd);
+   
+    int filelen = 1;
+    for(i = 0; i < update->entries; i++) {
+        filelen += strlen(files[i]) + 1;
+    }
+    int notdeleted = 0;
+    char** stripedfiles = malloc(filelen * sizeof(char*));
+    for(i = 0; i < update->entries; i++) {
+        if (tags[i] == Delete) continue;
+
+        strtok(files[i], "/");
+        char* entry = strtok(NULL, "\0");
+
+        stripedfiles[notdeleted] = malloc(strlen(entry) + 1);
+        memset(stripedfiles[notdeleted], '\0', strlen(entry) + 1);
+        memcpy(stripedfiles[notdeleted], entry, strlen(entry));
+
+        notdeleted++;
+
+    }
+
+    // Replace files in local repo
+    if (notdeleted != 0) {
+        NetworkCommand* request = newfilerequest(project, stripedfiles, notdeleted);
+        request->type = upgradenet;
+        freeCommit(update);
+
+        sendNetworkCommand(request, sockfd);
+
+        // Recieve files from server
+        NetworkCommand* response = readMessage(sockfd);
+
+        if(checkresponse("file", response) < 0) return -1;
+
+        recreatefile("archive.tar.gz", response->argv[2], response->arglengths[2]);
+        uncompressfile("archive.tar.gz");
+
+    } else {
+        NetworkCommand* cancel = newFailureCMND("upgrade", "no files");
+        sendNetworkCommand(cancel, sockfd);
+    }
+
+    remove(manifestpath);
+    rename(tempmanifestpath, manifestpath);
+    remove(updatepath);
+
+    printf("Local repo upgraded successfully\n");
     return -1;
 }
 
@@ -322,6 +498,7 @@ Update* createupdate(char* remoteManifest, int remotelen, char* project, int pro
     Manifest* remotemanifest = parseManifest(servermanifest);
     char** remotefiles = getManifestFiles(remotemanifest);
     char** remotehashcodes = getManifestHashcodes(remotemanifest);
+    int* remotefileversions = getManifestFileVersion(remotemanifest);
 
     if (localmanifest->entrycount == 0 && remotemanifest->entrycount == 0) {
         printf("Local project is up to date!\n");
@@ -381,7 +558,8 @@ Update* createupdate(char* remoteManifest, int remotelen, char* project, int pro
         for (j = 0; j < remotemanifest->entrycount; j++) {
             
             if (strcmp(files[i], remotefiles[j]) != 0) continue; 
-            else check = 1;
+            
+            check = 1;
             
             if (strcmp(hashcodes[i], remotehashcodes[j]) != 0) {
                 
@@ -456,13 +634,13 @@ Update* createupdate(char* remoteManifest, int remotelen, char* project, int pro
         if (!check) {
 
             // Add Case
-            int entrylen = 2 + digitCount(fileversions[i]) + 1 + strlen(files[i]) + 1 + 40 + 2;
+            int entrylen = 2 + digitCount(remotefileversions[i]) + 1 + strlen(remotefiles[i]) + 1 + 40 + 2;
             char entry[entrylen];
 
-            sprintf(entry, "A %d %s %s\n", fileversions[i], files[i], hashcodes[i]);                    
+            sprintf(entry, "A %d %s %s\n", remotefileversions[i], remotefiles[i], remotehashcodes[i]);                    
             write(update_fd, entry, entrylen - 1);
 
-            printf("A %s\n", files[i]);
+            printf("A %s\n", remotefiles[i]);
 
             update->entries++;
             update->filesize += entrylen - 1;
@@ -592,7 +770,8 @@ int _commit(ClientCommand* command) {
         return -1;
     }
 
-    NetworkCommand* toSend = newDataTransferCmnd(command->args[0], commit->filecontent, commit->filesize);      // Send commit file to server
+    printf("%d %d\n", commit->filesize, strlen(commit->filecontent));
+    NetworkCommand* toSend = newDataTransferCmnd(command->args[0], commit->filecontent, strlen(commit->filecontent));      // Send commit file to server
     sendNetworkCommand(toSend, sockfd);
     freeCMND(toSend);
     
@@ -692,8 +871,8 @@ Commit* createcommit(char* remoteManifest, int remotelen, char* project, int pro
     commit->entries = 0;
     commit->uid = -1;
 
-    commit->filecontent = malloc(localmanifestfile->size + servermanifest->size + 1);
-    memset(commit->filecontent, '\0', localmanifestfile->size + servermanifest->size+ 1);
+    commit->filecontent = malloc(localmanifestfile->size + servermanifest->size + 2);
+    memset(commit->filecontent, '\0', localmanifestfile->size + servermanifest->size+ 2);
     commit->filesize = 0;
 
     freefile(localmanifestfile);
@@ -826,6 +1005,7 @@ Commit* createcommit(char* remoteManifest, int remotelen, char* project, int pro
         return NULL;
     }
 
+    // strcat(commit->filecontent, "\n");
     write(fd, commit->filecontent, commit->filesize);      // TODO MAKE SURE ALL BYTES ARE WRITTEN TO FILE
     close(fd);
 
