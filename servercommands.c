@@ -305,6 +305,7 @@ int _rollbacknet(NetworkCommand* command, int sockfd) {
 			free(name);
 		}
 	}
+	closedir(archvedir);
 
 	if (!rollbacktar) {
 		printf("Error: Client requested a version of project '%s' that does not exist\n", command->argv[0]);
@@ -367,9 +368,9 @@ int _rollbacknet(NetworkCommand* command, int sockfd) {
 // checks that a project exists and returns its .Manifest version
 int _versionnet(NetworkCommand* command, int sockfd) {
 	// version  arg0- project name
-	char* name = malloc(9);
-	memset(name, '\0', 9);
-	memcpy(name, "version", 9);
+	char* name = malloc(8);
+	memset(name, '\0', 8);
+	memcpy(name, "version", 8);
 
 	// Check project exists and request is formatted correctly
 	if (!checkcommand(command, 1, name,sockfd,1)) return -1;
@@ -384,12 +385,12 @@ int _versionnet(NetworkCommand* command, int sockfd) {
 	char** filepats = getManifestFiles(manifest);
 	int* versions = getManifestFileVersion(manifest);
 
-	char* reason = malloc(manifestcontent->size);	
-	memset(reason, '\0', manifestcontent->size);
+	char* reason = malloc(manifestcontent->size + 1);	
+	memset(reason, '\0', manifestcontent->size + 1);
 	freefile(manifestcontent);
 
-
 	char ver[digitCount(manifest->version) + 2];
+	memset(ver, '\0',digitCount(manifest->version) + 2);
 	sprintf(ver, "%d\n", manifest->version);
 	strcat(reason, ver);
 
@@ -399,6 +400,13 @@ int _versionnet(NetworkCommand* command, int sockfd) {
 		sprintf(entry, "%d %s\n", versions[i], filepats[i]);
 		strcat(reason, entry);
 	}
+
+	for (i = 0; i < manifest->entrycount; i++) {
+		free(filepats[i]);
+	}
+	free(filepats);
+	free(versions);
+	freeManifest(manifest);
 
 	NetworkCommand* response = newSuccessCMND(name, reason);
 	sendNetworkCommand(response, sockfd);
@@ -707,6 +715,7 @@ int clientpush(NetworkCommand* command, int sockfd) {
 
 	unsigned char* hash = hashdata((unsigned char*)commit->filecontent, commit->filesize);
 	char* encoded_hash = hashtohex(hash);
+	free(hash);
 
 	if (strcmp(clienthash, encoded_hash) != 0) {		// client's commit does not match
 		// Send error message
@@ -718,6 +727,8 @@ int clientpush(NetworkCommand* command, int sockfd) {
 		freeCMND(nocommits);
 		return -1;
 	}
+
+	free(encoded_hash);
 	
 	// Send success message to client
 	char* reason = malloc(4);
@@ -760,12 +771,34 @@ int clientpush(NetworkCommand* command, int sockfd) {
 		char* archivename = malloc(archivenamelen);
 		sprintf(archivename, "%s/%d-%s", backupdirectory, version, project);
 		createcompressedfile(project, strlen(project), archivename, archivenamelen);
+		free(archivename);
 
 		char historypath[strlen(project) + 7];
 		sprintf(historypath, ".archive/%s/History", project);
 		int fd = open(historypath, O_WRONLY | O_APPEND | O_CREAT, S_IRUSR | S_IWUSR);
 		if (fd > 0) {
-			write(fd, commit->filecontent, commit->filesize);
+
+			char** filepaths = getCommitFilePaths(commit);
+			ModTag* modtags = getModificationTags(commit);
+			int* versions = getCommitVersions(commit);
+
+			int i = 0;
+			for (i = 0; i < commit->entries; i++) {
+					
+				int entrylen = strlen(filepaths[i]) + digitCount(versions[i]) + 5;
+				char entry[entrylen];
+				sprintf(entry, "%s %d %s\n", modtags[i] == Delete ? "D" : modtags[i] == Add ? "A" : "M" , versions[i], filepaths[i]);
+				write(fd, entry, entrylen - 1);				
+
+			}
+
+			for (i = 0; i < commit->entries; i++) {
+				free(filepaths[i]);		
+			}
+			free(filepaths);
+			free(modtags);
+			free(versions);
+
 		} else printf("Error: couldn't update history, skipping... %s\n", strerror(errno));
 		
 	} else printf("Error: couldn't backup current version, skipping...\n");
@@ -773,6 +806,8 @@ int clientpush(NetworkCommand* command, int sockfd) {
 	// Copy all clients files into server repo
 	recreatefile("archive.tar.gz", files->argv[1], files->arglengths[1]);
 	uncompressfile("archive.tar.gz");
+
+	freeCMND(files);
 
 	// Delete all files deleted on client side
 	char** paths = getCommitFilePaths(commit);
@@ -796,9 +831,19 @@ int clientpush(NetworkCommand* command, int sockfd) {
 		}
 	}
 
+	for (i = 0; i < commit->entries; i++) {
+		free(paths[i]);
+		free(hashes[i]);
+	}	
+	free(versions);
+	free(tags);
+	free(hashes);
+	free(paths);
+
 	// create a char* with enough space for all current entries and new entries - deleted entries
 	char newmanifest[manifestFile->size + addedlen];
 	memset(newmanifest, '\0', manifestFile->size + addedlen);
+	freefile(manifestFile);
 
 	char verstr[digitCount(version + 1) + 2];
 	sprintf(verstr, "%d\n", version + 1);
@@ -806,6 +851,7 @@ int clientpush(NetworkCommand* command, int sockfd) {
 
 	for (i = 0; i < addedcount; i++) {
 		strcat(newmanifest, added[i]);
+		free(added[i]);
 	}
 
 	char tempmanifestpath[strlen(project) + 16];
@@ -840,7 +886,7 @@ int clientpush(NetworkCommand* command, int sockfd) {
 	for (i = 0; i < projmeta->maxusers; i++) {
 		if (projmeta->activecommits[i]) {
 			printf("Expiring commit for user '%d' in '%s'\n", i, project);
-			free(projmeta->activecommits[i]);
+			freeCommit(projmeta->activecommits[i]);
 			projmeta->activecommits[i] = NULL;
 		}
 	}

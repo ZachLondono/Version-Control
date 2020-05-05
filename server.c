@@ -60,6 +60,20 @@ void inturupthandler() {
         pthread_join(thread_pool[i], NULL);
     }
 
+	Node* head = getHead();
+	while(head != NULL) {
+		ProjectMeta* meta = ((ProjectMeta*) head->content);
+		i = 0;
+		for (i = 0; i < meta->maxusers; i++) {
+			if (meta->activecommits[i] == NULL) continue;
+			freeCommit(meta->activecommits[i]);
+		}
+		free(meta->activecommits);
+		free(meta->project);
+		head = head->next;
+	}
+	freeLL(head);
+
     write(1, "\n", 1);
     exit(0);
 }

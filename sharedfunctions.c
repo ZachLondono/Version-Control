@@ -253,7 +253,7 @@ char** getManifestFiles(Manifest* manifest) {
 
         char* entry = malloc(strlen(manifest->entries[i]) + 1);
         memset(entry, '\0', strlen(manifest->entries[i]) + 1);
-        memcpy(entry, manifest->entries[i], strlen(manifest->entries[i]) + 1);
+        memcpy(entry, manifest->entries[i], strlen(manifest->entries[i]));
 
         strtok(entry, " ");
         char* filepath = strtok(NULL, " ");

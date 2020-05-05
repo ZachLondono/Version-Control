@@ -30,11 +30,11 @@ int insertNode(void* content) {
 }
 
 void freeLL() {
-    Node* temp = LLhead;
+    Node* temp = getHead();
     while(temp != NULL) {
         Node* tempB = temp->next;
-        free(temp);
         free(temp->content);
+        free(temp);
         temp = tempB;
     }
 }

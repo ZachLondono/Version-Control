@@ -936,8 +936,6 @@ Commit* createcommit(char* remoteManifest, int remotelen, char* project, int pro
             free(livehashcode);
 
             if (strcmp(encodedlivehash, hashcodes[i]) != 0) {
-               
-               printf("%s\n%s\n", encodedlivehash, hashcodes[i]);
 
                 if (strcmp((const char*)hashcodes[i],(const char*) remotehashcodes[j]) != 0) {    // check that local manifest hash matches the server manifest hash
                     printf("Error: There is an inconsistency between the remote project and the local project, skiping file '%s'\n", files[i]);
