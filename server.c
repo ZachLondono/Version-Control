@@ -66,6 +66,8 @@ void inturupthandler() {
 
 int main(int argc, char** argv) {
 
+	printf("Starting server\n");
+
 	if (argc != 2) {
 		printf("Error: Invalid argument count\n");
 		return -1;
