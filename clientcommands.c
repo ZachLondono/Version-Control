@@ -1256,93 +1256,73 @@ int _add(ClientCommand* command) {
 
 int _remove(ClientCommand* command) {
 
-    char* proj = command->args[0];
+    char* project = command->args[0];
+    int projlen = strlen(project);
     char* file = command->args[1];
+    int filelen = strlen(file);
 
     if(!checkForLocalProj(command->args[0])) {      // Check project exists
         printf("Error: project does not exist locally, checkout the project or create it if it does not exist\n");
         return -1;
     }
 
-    int projlen = strlen(command->args[0]);
-    int filelen = strlen(command->args[1]);
-    char* fullpath = malloc(projlen + 2 + filelen);
-    memset(fullpath, '\0', projlen + filelen + 2);
-    sprintf(fullpath, "%s/%s", proj, file);
+    char fullpath[projlen + filelen + 2];
+    sprintf(fullpath, "%s/%s", project, file);
 
-    char* manifestpath = malloc(projlen + 11);
-    memset(manifestpath, '\0', projlen + 11);              // Check for & load project local .Manifest
-    snprintf(manifestpath, projlen + 11, "%s/.Manifest", proj);
-    FileContents* manifest = readfile(manifestpath);
-    if (manifest == NULL) {
-        printf("Error: project has not been initalized or cannot be accessed\n");
-        free(fullpath);
-        free(manifestpath);
-        freefile(manifest);
+    char manifestpath[projlen + 11];
+    sprintf(manifestpath, "%s/.Manifest", project);
+
+    char new_manifestpath[projlen + 16];
+    sprintf(new_manifestpath, "%s/.temp.Manifest", project);
+
+    FileContents* manifestcontent = readfile(manifestpath);
+    if (!manifestcontent) {
+        printf("Error: Manifest does not exist or cannot be accessed\n");
         return -1;
     }
 
-    if(strstr(manifest->content, fullpath) == NULL) {      // Check if file doesn't have an entry in the .Manifest
-        printf("Error: file has not yet been added\n");
-        free(fullpath);
-        free(manifestpath);
-        freefile(manifest);
-        return -1;    
-    }
-
-    char* manifestcontent = malloc(manifest->size + 1);
-    memset(manifestcontent, '\0', manifest->size + 1);
-    memcpy(manifestcontent, manifest->content, manifest->size);
-
-    strtok(manifestcontent, "\n");                        // skip first line (manifest ver)
-
-    char* token;        // find the line in the manifest which contains this file
-    while ((token = strtok(NULL, "\n"), fullpath) != NULL) {
-        if (strstr(token, fullpath) == NULL) continue;
-        break;
-    }
-
-    int tokenlen = strlen(token);
-    char* fulltoken = malloc(tokenlen + 2);
-    memset(fulltoken, '\0', tokenlen + 2);
-    snprintf(fulltoken,tokenlen+2, "%s\n", token);
-    char* newcontent = strrmove(manifest->content, fulltoken);
-
-
-    char* tempmanifest = malloc(projlen + 16);              // Create a new .Manifest with new enty
-    memset(tempmanifest, '\0', projlen + 16);
-    snprintf(tempmanifest, projlen + 16, "%s.temp", manifestpath);
-    int fd = open(tempmanifest, O_RDWR | O_CREAT, S_IRWXU);
-    if (fd < 0) {
-        printf("Error: failed to add file\n");
-        close(fd);
+    int new_fd = open(new_manifestpath, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
+    if (new_fd < 0) {
+        printf("Error: couldn't update Manifest: %s\n", strerror(errno));
+        freefile(manifestcontent);
         return -1;
     }
 
-    int status = 0;         
-    int written = 0;
-    while((status = write(fd, &newcontent[written], manifest->size - tokenlen - 1 - written)) > 0) written += status;
-    freefile(manifest);
-    
-    
-    if (status == -1) {
-        printf("Error: failed to remove file\n");
+    Manifest* manifest = parseManifest(manifestcontent);    // needs to be freed
+    char** files = getManifestFiles(manifest);              // needs to be freed
+
+    int ver = getManifestVersion(manifestcontent);
+    char ver_s[digitCount(ver) + 2];
+    sprintf(ver_s, "%d\n", ver);
+    write(new_fd, ver_s, digitCount(ver) + 1);
+
+    int i = 0;
+    int check = 0;
+    for (i = 0; i < manifest->entrycount; i++) {
+        if (strcmp(files[i], fullpath) == 0) check = 1;
+        else {
+            int len = strlen(manifest->entries[i]) + 2;
+            char entry[len];
+            sprintf(entry, "%s\n", manifest->entries[i]);
+            write(new_fd, entry, len - 1);
+        }
+    }
+
+    if (!check) {
+        printf("Error: this file has not been added to the manifest\n");
+        remove(new_manifestpath);
+        freefile(manifestcontent);
+        freeManifest(manifest);
         return -1;
-    } 
+    }
 
-    remove(manifestpath);                                   // relace loacl .Manifest with new one
-    rename(tempmanifest, manifestpath);
-    
-    close(fd);
-    free(tempmanifest);
-    free(fullpath);
-    free(manifestpath);
-    free(manifestcontent);
-    free(fulltoken);
+    close(new_fd);
+    rename(new_manifestpath, manifestpath);
 
-    printf("File '%s' has been removed\n", file);
+    printf("File '%s' successfully removed from the project\n", file);
 
-    return -1;
+    return 0;
+
 }
 
 int _currentversion(ClientCommand* command) {
