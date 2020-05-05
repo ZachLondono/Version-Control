@@ -382,13 +382,14 @@ int _versionnet(NetworkCommand* command, int sockfd) {
 
 	FileContents* manifestcontent = readfile(manifestpath);
 	Manifest* manifest = parseManifest(manifestcontent);
-	freefile(manifestcontent);
 
 	char** filepats = getManifestFiles(manifest);
 	int* versions = getManifestFileVersion(manifest);
 
 	char* reason = malloc(manifestcontent->size);	
 	memset(reason, '\0', manifestcontent->size);
+	freefile(manifestcontent);
+
 
 	char ver[digitCount(manifest->version) + 2];
 	sprintf(ver, "%d\n", manifest->version);
