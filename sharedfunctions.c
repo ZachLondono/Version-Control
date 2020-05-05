@@ -90,47 +90,6 @@ int strshift(char* word, int populated, size_t buffsize, int offset) {
     return 0;
 }
 
-int incrimentManifest(char* project, FileContents* (*readfilepntr)(char*), ssize_t (*writepntr)(int fd, char* buff, int count)) {
-
-    int path_size = strlen(project) + 13;
-    char* path = malloc(path_size);
-    memset(path, '\0', path_size);
-    strcat(path,"./");
-    strcat(path,project);
-    strcat(path,"/.Manifest");
-
-    FileContents* manifest = (*readfilepntr)(path);
-    if (!manifest) return -1;
-    int version = getManifestVersion(manifest);
-    if (version < 0) {
-        printf("Error: failed to open .Manifest");
-        return version;
-    }
-    
-    int digc = digitCount(version);
-    char* version_s = malloc(digc + 1);
-    memset(version_s, '\0', digc + 1);
-    snprintf(version_s, digc+2, "%d", ++version);
-    printf("New .Manifest version: %d=%s digits = %d\n", version, version_s, digitCount(version));
-
-    int tmpfd = open("./.Manifest.tmp", O_RDWR | O_CREAT, S_IRWXU);
-
-    (*writepntr)(tmpfd, version_s, digc);
-    (*writepntr)(tmpfd, &manifest->content[digc], manifest->size-digc);
-
-    free(version_s);
-    freefile(manifest);
-
-    remove(path);
-
-    rename("./.Manifest.tmp", path);
-    free(path);
-    close(tmpfd);
-
-    return 0;
-
-}
-
 int projectVersion(char* project, FileContents* (*readfilepntr)(char*)) {
 
     int path_size = strlen(project) + 13;

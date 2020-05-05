@@ -53,7 +53,6 @@ char* strrmove(char* str, const char* sub);
 int isNum(char* value, int len);
 int digitCount(int num);
 int strshift(char* word, int populatedbytes, size_t buffsize, int offset);
-int incrimentManifest(char* project, FileContents* (*readfile)(char*), ssize_t (*write)(int fd, char* buff, int count));
 int projectVersion(char* project, FileContents* (*readfile)(char*));
 int createcompressedarchive(char* filepath, int pathlen);
 int createcompressedfile(char* filepath, int pathlen, char* archivename, int archivenamelen);
