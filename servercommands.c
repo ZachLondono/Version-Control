@@ -285,7 +285,6 @@ int _rollbacknet(NetworkCommand* command, int sockfd) {
 
 	struct dirent* entry;
 	while((entry = readdir(archvedir))) {
-		printf("%s\n", entry->d_name);	
 		if (entry->d_type == DT_REG) {
 			if (strcmp(entry->d_name, "History") == 0 || strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
 			char* name = malloc(strlen(entry->d_name));
@@ -299,7 +298,6 @@ int _rollbacknet(NetworkCommand* command, int sockfd) {
 				memcpy(directoriestoremove[dircount], entry->d_name,strlen(entry->d_name) + 1);
 				++dircount;
 			} else if (atoi(version) == newversion) {
-				printf("**%s\n", entry->d_name);
 				rollbacktar = malloc(strlen(entry->d_name) + 1);
 				memset(rollbacktar, '\0', strlen(entry->d_name));
 				memcpy(rollbacktar, entry->d_name, strlen(entry->d_name));
@@ -320,10 +318,10 @@ int _rollbacknet(NetworkCommand* command, int sockfd) {
 		return -1;
 	}	
 
-	char cmnd[strlen(command->argv[0]) + 9];
+	char cmnd[strlen(command->argv[0]) + 9 + 17];
 	memset(cmnd, '\0', strlen(command->argv[0]) + 9);
 	// memcpy(olddir, command->argv[0], strlen(command->argv[0]) + 1);
-	sprintf(cmnd, "rm -rf %s", command->argv[0]);
+	sprintf(cmnd, "rm -rf %s > /dev/null 2>&1", command->argv[0]);
 	
 	if (system(cmnd) < 0) {
 		printf("Error: There was an error removing old files in project %s, skipping... %s\n", command->argv[0], strerror(errno));

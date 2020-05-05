@@ -121,11 +121,10 @@ int getManifestVersion(FileContents* manifest) {
 }
 
 int createcompressedfile(char* filepath, int pathlen, char* archivename, int archivenamelen) {
-    int cmndlen = 11 + archivenamelen + pathlen;
+    int cmndlen = 11 + archivenamelen + pathlen + 17;
     char* tarcmnd = malloc(cmndlen);
 	memset(tarcmnd,'\0', cmndlen);
-	snprintf(tarcmnd, cmndlen, "tar -czf %s %s",archivename, filepath);
-    printf("%s\n", tarcmnd);
+	snprintf(tarcmnd, cmndlen, "tar -czf %s %s > /dev/null 2>&1",archivename, filepath);
 	if (system(tarcmnd) != 0) {
         printf("tar command failed\n");
         return -1;
@@ -180,11 +179,11 @@ int recreatefile(char* filepath, char* contents, int size) {
 int uncompressfile(char* compressedpath) {
 
 	int pathlen = strlen(compressedpath);
-	int cmndlen = 10 + pathlen;
+	int cmndlen = 10 + pathlen + 17;
 
 	char* tarcmnd = malloc(cmndlen);
 	memset(tarcmnd,'\0', cmndlen);
-	snprintf(tarcmnd, cmndlen, "tar -xf %s", compressedpath);
+	snprintf(tarcmnd, cmndlen, "tar -xf %s > /dev/null 2>&1", compressedpath);
 	int ret = system(tarcmnd);
 	free(tarcmnd);
 
