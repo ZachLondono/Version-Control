@@ -347,6 +347,18 @@ int _rollbacknet(NetworkCommand* command, int sockfd) {
 		remove(full);
 	}
 	
+
+	char historypath[strlen(archivepath) + 9];
+	sprintf(historypath, "%s/History", archivepath);
+
+	int fd = open(historypath, O_WRONLY | O_APPEND | O_CREAT, S_IRUSR | S_IWUSR);
+	if (fd > 0) {
+		char entry[18 + digitCount(newversion)];
+		sprintf(entry, "rollback to ver %d\n", newversion);
+		write(fd, entry, 17 + digitCount(newversion));
+	} else printf("Error: couldn't update history, skipping... %s\n", strerror(errno));
+	
+
 	NetworkCommand* response = newSuccessCMND_B(name, reason, 4);
 	sendNetworkCommand(response, sockfd);
 	free(response);
@@ -363,12 +375,6 @@ int _versionnet(NetworkCommand* command, int sockfd) {
 
 	// Check project exists and request is formatted correctly
 	if (!checkcommand(command, 1, name,sockfd,1)) return -1;
-	
-	// Get version from project's manifest
-	// int version = projectVersion(command->argv[0], &serverreadfile);
-	// char* reason = malloc(digitCount(version) + 1);
-	// memset(reason, '\0', digitCount(version) + 1);
-	// snprintf(reason, digitCount(version)+1, "%d", version);
 
 	int pathlen = strlen(command->argv[0]) + 11;
 	char manifestpath[pathlen];
@@ -758,7 +764,6 @@ int clientpush(NetworkCommand* command, int sockfd) {
 
 		char historypath[strlen(project) + 7];
 		sprintf(historypath, ".archive/%s/History", project);
-		printf(historypath);
 		int fd = open(historypath, O_WRONLY | O_APPEND | O_CREAT, S_IRUSR | S_IWUSR);
 		if (fd > 0) {
 			write(fd, commit->filecontent, commit->filesize);
