@@ -267,9 +267,12 @@ char* strrmove(char* str, const char* sub) {
 
 Manifest* parseManifest(FileContents* filecontent) {
 
+    char content[filecontent->size + 1];
+    memcpy(content, filecontent->content, filecontent->size + 1);
+
     int entrycount = -1;
     int i = 0;
-    for(i = 0; i < filecontent->size; i++) if (filecontent->content[i] == '\n') entrycount++;
+    for(i = 0; i < filecontent->size; i++) if (content[i] == '\n') entrycount++;
     if (entrycount < 0) return NULL;
 
     Manifest* manifest = malloc(sizeof(Manifest));
@@ -277,7 +280,7 @@ Manifest* parseManifest(FileContents* filecontent) {
     manifest->entrycount = entrycount;
     
     manifest->entries = malloc(entrycount * sizeof(char*)); 
-    char* version = strtok(filecontent->content, "\n");
+    char* version = strtok(content, "\n");
 
     if (!isNum(version, strlen(version))) {
         printf("Error: malformed Manifest file\n");
