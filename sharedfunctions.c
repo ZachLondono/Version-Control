@@ -90,23 +90,6 @@ int strshift(char* word, int populated, size_t buffsize, int offset) {
     return 0;
 }
 
-int projectVersion(char* project, FileContents* (*readfilepntr)(char*)) {
-
-    int path_size = strlen(project) + 13;
-    char* path = malloc(path_size);
-    memset(path, '\0', path_size);
-    strcat(path,"./");
-    strcat(path,project);
-    strcat(path,"/.Manifest");
-
-    FileContents* manifest = readfilepntr(path);
-    free(path);
-    int ret = getManifestVersion(manifest);
-    freefile(manifest);
-    return ret;
-
-}
-
 int getManifestVersion(FileContents* manifest) {
 
     if (manifest == NULL) {
