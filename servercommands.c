@@ -600,6 +600,8 @@ int entercommit(int uid, char* projectName, char* commitdata, int length) {
 		project->maxusers *= 2; 
 	}
 
+	if (project->activecommits[uid] != NULL) freeCommit(project->activecommits[uid]);
+
 	Commit* commit = malloc(sizeof(Commit));
 	commit->filecontent = malloc(length + 1);
 	memset(commit->filecontent, '\0', length + 1);
@@ -751,7 +753,6 @@ int clientpush(NetworkCommand* command, int sockfd) {
 	FileContents* manifestFile = readfile(manifestpath);
 	int version = getManifestVersion(manifestFile);
 
-
 	char archivedirectory[10] = ".archive";
 	int checkfolder = 0;
     DIR* dir = NULL;
@@ -809,62 +810,78 @@ int clientpush(NetworkCommand* command, int sockfd) {
 
 	freeCMND(files);
 
-	// Delete all files deleted on client side
+	// Replace old manifest w/ new
+	Manifest* manifest = parseManifest(manifestFile);
+	freefile(manifestFile);
+	freeManifest(manifest);
+	char** manfiles = getManifestFiles(manifest);
+
 	char** paths = getCommitFilePaths(commit);
 	char** hashes = getCommitHashes(commit);
 	ModTag* tags = getModificationTags(commit);
 	int* versions = getCommitVersions(commit);
 
+	char tempmanifestpath[strlen(project) + 16];
+	memset(tempmanifestpath, '\0', strlen(project) + 16);
+	sprintf(tempmanifestpath, "%s/.temp.Manifest", project);
+	int newfd = open(tempmanifestpath, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
+
+	char ver_s[digitCount(version + 1) + 2];
+	sprintf(ver_s, "%d\n", version + 1);
+	write(newfd, ver_s, digitCount(version + 1) + 1);
+
 	int i = 0;
-	int addedcount = 0;
-	char* added[commit->entries];
-	// int removedcount = 0;
-	// char* removed[commit->entries];
-	int addedlen = 0; 
+	for (i = 0; i < manifest->entrycount; i++){
+
+		int j = 0;
+		int checked = 0;
+
+		for (j = 0; j < commit->entries; j++) {
+
+			if (strcmp(manfiles[i], paths[j]) != 0) continue;
+			
+			checked = 1;
+			if (tags[j] == Delete) continue;	// don't write deleted files;
+			
+			// Else its a modify
+			int entrylen = strlen(paths[j]) + digitCount(versions[j]) + 44;
+			char entry[entrylen];
+			sprintf(entry, "%d %s %s\n", versions[j], paths[j], hashes[j]);
+			write(newfd, entry, entrylen-1);
+
+		}
+
+		if (!checked) {
+			write(newfd, manifest->entries[i], strlen(manifest->entries[i]));
+			write(newfd, "\n", 1);
+		}
+
+	}
+
 	for (i = 0; i < commit->entries; i++) {
-		if (tags[i] == Add || tags[i] == Modify) {
-			int len = strlen(paths[i]) + digitCount(versions[i]) + 43;
-			addedlen += len;
-			added[addedcount] = malloc(len + 1);
-			sprintf(added[addedcount], "%d %s %s\n", versions[i], paths[i], hashes[i]);
-			++addedcount;
+		if (tags[i] == Add) {
+			int entrylen = strlen(paths[i]) + digitCount(versions[i]) + 44;
+			char entry[entrylen];
+			sprintf(entry, "%d %s %s\n", versions[i], paths[i], hashes[i]);
+			write(newfd, entry, entrylen-1);
 		}
 	}
 
+
+	for (i = 0; i < manifest->entrycount; i++) {
+		free(manfiles[i]);
+	}
 	for (i = 0; i < commit->entries; i++) {
 		free(paths[i]);
 		free(hashes[i]);
 	}	
+	free(manfiles);
 	free(versions);
 	free(tags);
 	free(hashes);
 	free(paths);
 
-	// create a char* with enough space for all current entries and new entries - deleted entries
-	char newmanifest[manifestFile->size + addedlen];
-	memset(newmanifest, '\0', manifestFile->size + addedlen);
-	freefile(manifestFile);
-
-	char verstr[digitCount(version + 1) + 2];
-	sprintf(verstr, "%d\n", version + 1);
-	strcat(newmanifest, verstr);
-
-	for (i = 0; i < addedcount; i++) {
-		strcat(newmanifest, added[i]);
-		free(added[i]);
-	}
-
-	char tempmanifestpath[strlen(project) + 16];
-	memset(tempmanifestpath, '\0', strlen(project) + 16);
-	sprintf(tempmanifestpath, "%s/.temp.Manifest", project);
-	int fd = open(tempmanifestpath, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
-	write(fd, newmanifest, addedlen + strlen(verstr));
-
-	remove(manifestpath);
-
 	rename(tempmanifestpath, manifestpath);
-
-	pthread_mutex_unlock(&repo_lock);
 
 	// Send success message to client
 	reason = malloc(4);
@@ -873,13 +890,18 @@ int clientpush(NetworkCommand* command, int sockfd) {
 	sendNetworkCommand(success, sockfd);
 	freeCMND(success);
 
+
+	// Expire all pending commits
 	Node* head = getHead();
 	while(head) {
 		if (strcmp(((ProjectMeta*) head->content)->project, project) == 0) break;
 		head = head->next;
 	}
 
-	if (head == NULL) return 0;
+	if (head == NULL) {
+		pthread_mutex_unlock(&repo_lock);
+		return 0;
+	}
 
 	ProjectMeta* projmeta = (ProjectMeta*) head->content;
 	i = 0;
@@ -890,6 +912,9 @@ int clientpush(NetworkCommand* command, int sockfd) {
 			projmeta->activecommits[i] = NULL;
 		}
 	}
+
+
+	pthread_mutex_unlock(&repo_lock);
 
 	return 0;
 
