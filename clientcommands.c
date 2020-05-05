@@ -170,10 +170,13 @@ int _configure(ClientCommand* command) {
         return -1;
     }
 
-    int size = strlen(command->args[0]) + strlen(command->args[1]) + 13;
+    int uid = getUID();
+
+    int size = strlen(command->args[0]) + strlen(command->args[1]) + 13 + 4 + digitCount(uid);
+    if (uid < 0) size += 1;
     char* filecontents = malloc(sizeof(char) * (size));
     memset(filecontents, '\0', size);
-    snprintf(filecontents, size, "host:%s\nport:%s\n", command->args[0], command->args[1]);
+    snprintf(filecontents, size, "host:%s\nport:%s\nuid:%d", command->args[0], command->args[1],uid);
 
     if (write(fd_config, filecontents, size - 1 ) == -1) {
         printf("Error: couldn't write to .config file\n");
@@ -262,6 +265,8 @@ int _update(ClientCommand* command) {
         printf("Error: couldn't prepare update, conflicts exist. resolve the conflicts and try again.\n");
         return -1;
     }
+
+    if (update->entries == 0) return 0;
 
     printf("Successfuly prepared update with '%d' changes\n", update->entries);
 
@@ -471,7 +476,7 @@ Update* createupdate(char* remoteManifest, int remotelen, char* project, int pro
     free(servermanifestpath);
 
     close(servermanifest->fd);
-    system("rm -rf .tempfiles");
+    system("rm -rf .tempfiles > /dev/null 2>&1");
 
     char* localmanifestpath = malloc(11 + projlen);
     memset(localmanifestpath, '\0', 11 + projlen);
@@ -500,19 +505,19 @@ Update* createupdate(char* remoteManifest, int remotelen, char* project, int pro
     char** remotehashcodes = getManifestHashcodes(remotemanifest);
     int* remotefileversions = getManifestFileVersion(remotemanifest);
 
+    Update* update = malloc(sizeof(Update));
+    update->uptodate = 0;
+    update->entries = 0;
+    update->uid = -1;
+
     if (localmanifest->entrycount == 0 && remotemanifest->entrycount == 0) {
         printf("Local project is up to date!\n");
         freeManifest(localmanifest);
         freeManifest(remotemanifest);
         freefile(localmanifestfile);
         freefile(servermanifest);
-        return NULL;
+        return update;
     }
-
-    Update* update = malloc(sizeof(Update));
-    update->uptodate = 0;
-    update->entries = 0;
-    update->uid = -1;
 
     update->filecontent = malloc(localmanifestfile->size + servermanifest->size + 1);
     memset(update->filecontent, '\0', localmanifestfile->size + servermanifest->size+ 1);
@@ -836,7 +841,7 @@ Commit* createcommit(char* remoteManifest, int remotelen, char* project, int pro
     free(servermanifestpath);
 
     close(servermanifest->fd);
-    system("rm -rf .tempfiles");
+    system("rm -rf .tempfiles > /dev/null 2>&1");
 
     char* localmanifestpath = malloc(11 + projlen);
     memset(localmanifestpath, '\0', 11 + projlen);
@@ -932,6 +937,8 @@ Commit* createcommit(char* remoteManifest, int remotelen, char* project, int pro
 
             if (strcmp(encodedlivehash, hashcodes[i]) != 0) {
                
+               printf("%s\n%s\n", encodedlivehash, hashcodes[i]);
+
                 if (strcmp((const char*)hashcodes[i],(const char*) remotehashcodes[j]) != 0) {    // check that local manifest hash matches the server manifest hash
                     printf("Error: There is an inconsistency between the remote project and the local project, skiping file '%s'\n", files[i]);
                     freefile(livecontent);
@@ -1014,8 +1021,8 @@ Commit* createcommit(char* remoteManifest, int remotelen, char* project, int pro
     if (commit->filesize == '\0') {
         printf("There are no changes to commit. The local files are all up to date.\n");
         close(fd);
-        free(commit);
-        return NULL;
+        commit->entries = 0;
+        return commit;
     }
 
     // strcat(commit->filecontent, "\n");
@@ -1461,7 +1468,10 @@ int _rollback(ClientCommand* command) {
 
     NetworkCommand* response = readMessage(sockfd);
 
-    checkresponse("rollback", response);
+    if (checkresponse("rollback", response) < 0) return -1;
+
+    printf("Successfully rolled back '%s' to version '%s'\n", command->args[0], command->args[1]);
+
 
     return 0;
 }
