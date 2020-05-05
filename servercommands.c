@@ -365,10 +365,35 @@ int _versionnet(NetworkCommand* command, int sockfd) {
 	if (!checkcommand(command, 1, name,sockfd,1)) return -1;
 	
 	// Get version from project's manifest
-	int version = projectVersion(command->argv[0], &serverreadfile);
-	char* reason = malloc(digitCount(version) + 1);
-	memset(reason, '\0', digitCount(version) + 1);
-	snprintf(reason, digitCount(version)+1, "%d", version);
+	// int version = projectVersion(command->argv[0], &serverreadfile);
+	// char* reason = malloc(digitCount(version) + 1);
+	// memset(reason, '\0', digitCount(version) + 1);
+	// snprintf(reason, digitCount(version)+1, "%d", version);
+
+	int pathlen = strlen(command->argv[0]) + 11;
+	char manifestpath[pathlen];
+	sprintf(manifestpath, "%s/.Manifest", command->argv[0]);
+
+	FileContents* manifestcontent = readfile(manifestpath);
+	Manifest* manifest = parseManifest(manifestcontent);
+	freefile(manifestcontent);
+
+	char** filepats = getManifestFiles(manifest);
+	int* versions = getManifestFileVersion(manifest);
+
+	char* reason = malloc(manifestcontent->size);	
+	memset(reason, '\0', manifestcontent->size);
+
+	char ver[digitCount(manifest->version) + 2];
+	sprintf(ver, "%d\n", manifest->version);
+	strcat(reason, ver);
+
+	int i = 0;
+	for (i = 0; i < manifest->entrycount; i++) {
+		char entry[digitCount(versions[i]) + 1 + strlen(filepats[i]) + 2];
+		sprintf(entry, "%d %s\n", versions[i], filepats[i]);
+		strcat(reason, entry);
+	}
 
 	NetworkCommand* response = newSuccessCMND(name, reason);
 	sendNetworkCommand(response, sockfd);
