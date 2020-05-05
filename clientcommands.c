@@ -757,7 +757,10 @@ int _commit(ClientCommand* command) {
         return -1;        
     }
 
-    if (!commit) {
+    if (commit->entries == 0) {
+
+        freeCommit(commit);
+
         char* name = malloc(7);
         memset(name, '\0', 7);
         memcpy(name, "commit", 7);
@@ -863,7 +866,14 @@ Commit* createcommit(char* remoteManifest, int remotelen, char* project, int pro
         freeManifest(remotemanifest);
         freefile(localmanifestfile);
         freefile(servermanifest);
-        return NULL;
+
+        Commit* commit = malloc(sizeof(Commit));
+        commit->entries = 0;
+        commit->filesize = 0;
+        commit->filecontent = malloc(1);
+        commit->uid = 0;
+
+        return commit;
     }
 
     Commit* commit = malloc(sizeof(Commit));
@@ -1403,7 +1413,7 @@ int _currentversion(ClientCommand* command) {
     
     if (checkresponse("version", response) < 0) return -1;     // check the response if valid
 
-    printf("Project version: %s\n", response->argv[2]); 
+    printf("Project version: %s", response->argv[2]); 
     
     freeCMND(response);
 
