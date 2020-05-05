@@ -213,7 +213,7 @@ Manifest* parseManifest(FileContents* filecontent) {
 
     int entrycount = -1;
     int i = 0;
-    for(i = 0; i < filecontent->size; i++) if (content[i] == '\n') entrycount++;
+    for(i = 0; i < filecontent->size; i++) if (content[i] == '\n') if (i == 0 || content[i-1] != '\n') entrycount++;
     if (entrycount < 0) return NULL;
 
     Manifest* manifest = malloc(sizeof(Manifest));

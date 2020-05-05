@@ -570,8 +570,10 @@ Update* createupdate(char* remoteManifest, int remotelen, char* project, int pro
                 
                 FileContents* livecontent = readfile(files[i]);
                 unsigned char* livehashcode = hashdata((unsigned char*) livecontent->content, livecontent->size);
+                char* encodedlivehash = hashtohex(livehashcode);
+                free(livehashcode);
 
-                if (strcmp((const char*)hashcodes[i], (const char*)livehashcode) == 0) {
+                if (strcmp(hashcodes[i], encodedlivehash) == 0) {
 
                     // if (conflict) break;
 
@@ -601,6 +603,8 @@ Update* createupdate(char* remoteManifest, int remotelen, char* project, int pro
                     printf("C %s\n", files[i]);
 
                 }
+
+                free(encodedlivehash);
 
             }
 
@@ -945,15 +949,15 @@ Commit* createcommit(char* remoteManifest, int remotelen, char* project, int pro
                 }
 
                 // Modify condition
-                char* commitentry = malloc(strlen(files[i]) + digitCount(fileversions[i]) + 46);
-                memset(commitentry, '\0', strlen(files[i]) + digitCount(fileversions[i]) + 46);
+                char* commitentry = malloc(strlen(files[i]) + digitCount(1 +fileversions[i]) + 46);
+                memset(commitentry, '\0', strlen(files[i]) + digitCount(1 +fileversions[i]) + 46);
  
                 printf("M %s\n", files[i]);
-                sprintf(commitentry, "M %d %s %s\n", fileversions[i], files[i], hashcodes[i]); 
+                sprintf(commitentry, "M %d %s %s\n", 1 + fileversions[i], files[i], encodedlivehash); 
 
                 strcat(commit->filecontent, commitentry);
                 free(commitentry);
-                commit->filesize  += strlen(files[i]) + digitCount(fileversions[i]) + 45;
+                commit->filesize  += strlen(files[i]) + digitCount( 1 + fileversions[i]) + 45;
                 commit->entries += 1;
             }
             freefile(livecontent);
@@ -1133,9 +1137,10 @@ int _push(ClientCommand* command) {
 
     Manifest* manifest = parseManifest(manifestcontent);    // needs to be freed
     char** manifestfiles = getManifestFiles(manifest);              // needs to be freed
-    char** hashcodes = getManifestHashcodes(manifest);
+    // char** hashcodes = getManifestHashcodes(manifest);
 
     int* versions = getCommitVersions(commit);
+    char** newhashes = getCommitHashes(commit);
 
     char new_manifestpath[projlen + 16];
     sprintf(new_manifestpath, "%s/.temp.Manifest", command->args[0]);
@@ -1163,7 +1168,7 @@ int _push(ClientCommand* command) {
             int entrylen = strlen(manifest->entries[i]) + 2;
             char entry[entrylen];
             memset(entry, '\0', entrylen);
-            sprintf(entry, "%d %s %s\n", versions[j], paths[j], hashcodes[i]);
+            sprintf(entry, "%d %s %s\n", versions[j], paths[j], newhashes[j]);
             write(new_fd, entry, entrylen - 1);
         }
         if (!check) {
