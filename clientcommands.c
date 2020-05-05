@@ -917,21 +917,25 @@ Commit* createcommit(char* remoteManifest, int remotelen, char* project, int pro
             // file is already in remote, check that is up to date with live file
             FileContents* livecontent = readfile(files[i]);
             unsigned char* livehashcode = hashdata((unsigned char*) livecontent->content, livecontent->size);
+            char* encodedlivehash = hashtohex(livehashcode);
+            free(livehashcode);
 
-            if (strcmp((const char*)livehashcode, (const char*) hashcodes[i]) != 0) {
+            if (strcmp(encodedlivehash, hashcodes[i]) != 0) {
+               
                 if (strcmp((const char*)hashcodes[i],(const char*) remotehashcodes[j]) != 0) {    // check that local manifest hash matches the server manifest hash
                     printf("Error: There is an inconsistency between the remote project and the local project, skiping file '%s'\n", files[i]);
                     freefile(livecontent);
-                    free(livehashcode);
+                    free(encodedlivehash);
                     continue;
                 }
 
                 // Modify condition
                 char* commitentry = malloc(strlen(files[i]) + digitCount(fileversions[i]) + 46);
                 memset(commitentry, '\0', strlen(files[i]) + digitCount(fileversions[i]) + 46);
-                sprintf(commitentry, "M %s", files[i]); 
-                printf("%s\n", commitentry);
+ 
+                printf("M %s\n", files[i]);
                 sprintf(commitentry, "M %d %s %s\n", fileversions[i], files[i], hashcodes[i]); 
+
                 strcat(commit->filecontent, commitentry);
                 free(commitentry);
                 commit->filesize  += strlen(files[i]) + digitCount(fileversions[i]) + 45;
@@ -1098,7 +1102,62 @@ int _push(ClientCommand* command) {
 
     if(checkresponse("push", responseB) == 0) printf("Commits have been successfully pushed to remote\n");
     
-    // incrimentManifest(command->args[0], read, write);
+
+
+    // Update manifest versions
+
+    int projlen = strlen(command->args[0]);
+    char manifestpath[projlen + 11];
+    sprintf(manifestpath, "%s/.Manifest", command->args[0]);
+
+    FileContents* manifestcontent = readfile(manifestpath);
+    if (!manifestcontent) {
+        printf("Error: Manifest does not exist or cannot be accessed\n");
+        return -1;
+    }
+
+    Manifest* manifest = parseManifest(manifestcontent);    // needs to be freed
+    char** manifestfiles = getManifestFiles(manifest);              // needs to be freed
+    char** hashcodes = getManifestHashcodes(manifest);
+
+    int* versions = getCommitVersions(commit);
+
+    char new_manifestpath[projlen + 16];
+    sprintf(new_manifestpath, "%s/.temp.Manifest", command->args[0]);
+
+    int new_fd = open(new_manifestpath, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
+
+    if (new_fd < 0) {
+        printf("Error: couldn't update Manifest: %s\n", strerror(errno));
+        freefile(manifestcontent);
+        return -1;
+    }
+
+    int ver = getManifestVersion(manifestcontent);
+    char ver_s[digitCount(ver + 1) + 2];
+    sprintf(ver_s, "%d\n", ver + 1);
+    write(new_fd, ver_s, digitCount(ver + 1) + 1);
+
+    int j = 0;
+    for (i = 0; i < manifest->entrycount; i++) {
+        int check = 0;
+        for (j = 0; j < commit->entries; j++) {
+            if (strcmp(manifestfiles[i], paths[j]) != 0) continue;
+            check = 1;
+            // update file version in manifest
+            int entrylen = strlen(manifest->entries[i]) + 2;
+            char entry[entrylen];
+            memset(entry, '\0', entrylen);
+            sprintf(entry, "%d %s %s\n", versions[j], paths[j], hashcodes[i]);
+            write(new_fd, entry, entrylen - 1);
+        }
+        if (!check) {
+            write(new_fd, manifest->entries[i], strlen(manifest->entries[i]));
+            write(new_fd, "\n", 1);
+        }
+    }
+
+    rename(new_manifestpath, manifestpath);
 
     remove(commitpath);
     
